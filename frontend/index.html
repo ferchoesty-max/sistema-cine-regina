@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cine Regina — Prototipo Inicial Front-End y Back-End</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="header">
+    <div class="logo-box">
+      <img src="img/logo.png" alt="Cine Regina" class="logo">
+      <div>
+        <h1>Cine Regina — Sistema de Información</h1>
+        <p>Prototipo Inicial: Integración de Front-End y Back-End</p>
+      </div>
+    </div>
+    <div class="status-box">
+      <strong>Estado:</strong> Back-End en Python (Flask) conectado
+    </div>
+  </header>
+
+  <div id="mensaje-box" class="mensaje hidden"></div>
+
+  <nav class="nav">
+    <button class="nav-btn active" onclick="verModulo('taquilla')">1. Taquilla y Boletos</button>
+    <button class="nav-btn" onclick="verModulo('dulceria')">2. Dulcería Express</button>
+    <button class="nav-btn" onclick="verModulo('incidencias')">3. Reporte de Sala</button>
+  </nav>
+
+  <main class="contenedor">
+
+    <section id="modulo-taquilla" class="modulo">
+      <h2>Venta y Registro de Boletos</h2>
+      <p class="desc">El usuario captura los datos en el Front-End, se envían al servidor Flask en el Back-End y este calcula el total y guarda el registro.</p>
+
+      <div class="panel-grid">
+        <div class="caja-form">
+          <h3>Nuevo Registro de Boleto</h3>
+          <form id="form-boleto">
+            <div class="campo">
+              <label for="peli-select">Seleccionar Película:</label>
+              <select id="peli-select" required>
+              </select>
+            </div>
+
+            <div class="campo">
+              <label for="cliente-nombre">Nombre del Cliente:</label>
+              <input type="text" id="cliente-nombre" placeholder="Ej. Fernando Tolentino" required>
+            </div>
+
+            <div class="campo-doble">
+              <div class="campo">
+                <label for="boletos-cant">Cantidad:</label>
+                <input type="number" id="boletos-cant" value="0" min="1" max="10" readonly required>
+              </div>
+              <div class="campo">
+                <label for="asientos-txt">Asientos Seleccionados:</label>
+                <input type="text" id="asientos-txt" placeholder="Selecciona abajo..." readonly required>
+              </div>
+            </div>
+
+            <!-- mapa de asientos tipo cinepolis -->
+            <div class="campo">
+              <label>Mapa de Sala (Haz clic para elegir):</label>
+              <div class="mapa-cine">
+                <div class="leyenda-asientos">
+                  <span class="leyenda-item"><span class="cuadro-muestra amarillo"></span> Selección</span>
+                  <span class="leyenda-item"><span class="cuadro-muestra negro"></span> Ocupado</span>
+                  <span class="leyenda-item"><span class="cuadro-muestra azul"></span> Tradicional</span>
+                </div>
+                <div class="barra-pantalla">Pantalla</div>
+                <div id="grid-asientos" class="grid-asientos">
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-guardar">Registrar y Cobrar Boleto</button>
+          </form>
+        </div>
+
+        <div class="caja-tabla">
+          <h3>Boletos Almacenados en el Back-End</h3>
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Cliente</th>
+                <th>Película</th>
+                <th>Horario</th>
+                <th>Asientos</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-boletos-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="modulo-dulceria" class="modulo hidden">
+      <h2>Dulcería y Preparación de Combos</h2>
+      <p class="desc">Simulación del envío de pedidos de alimentos a la cocina del cine mediante solicitudes HTTP POST.</p>
+
+      <div class="panel-grid">
+        <div class="caja-form">
+          <h3>Ordenar Combo o Bebida</h3>
+          <form id="form-dulceria">
+            <div class="campo">
+              <label for="dulceria-cliente">Nombre del Cliente:</label>
+              <input type="text" id="dulceria-cliente" placeholder="Ej. Carlos Ramos" required>
+            </div>
+
+            <div class="campo">
+              <label for="dulceria-combo">Producto / Combo:</label>
+              <select id="dulceria-combo">
+                <option value="Combo Pareja (Palomitas + 2 Refrescos)">Combo Pareja (Palomitas + 2 Refrescos) — $175.00</option>
+                <option value="Combo Individual (Palomitas medianas + Refresco)">Combo Individual (Palomitas medianas + Refresco) — $120.00</option>
+                <option value="Hot Dog Tradicional">Hot Dog Tradicional — $60.00</option>
+              </select>
+            </div>
+
+            <div class="campo">
+              <label for="dulceria-cant">Cantidad:</label>
+              <input type="number" id="dulceria-cant" value="1" min="1" max="5" required>
+            </div>
+
+            <button type="submit" class="btn-guardar">Enviar Pedido a Cocina</button>
+          </form>
+        </div>
+
+        <div class="caja-tabla">
+          <h3>Órdenes en Cocina (Back-End)</h3>
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Cliente</th>
+                <th>Producto</th>
+                <th>Cant.</th>
+                <th>Total</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-dulceria-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="modulo-incidencias" class="modulo hidden">
+      <h2>Reporte de Incidencias en Sala</h2>
+      <p class="desc">Canal de comunicación entre el usuario/staff y el personal técnico para atender quejas de clima, audio o proyección.</p>
+
+      <div class="panel-grid">
+        <div class="caja-form">
+          <h3>Reportar Problema Técnico</h3>
+          <form id="form-incidencia">
+            <div class="campo">
+              <label for="inc-sala">Sala:</label>
+              <select id="inc-sala">
+                <option value="Sala 1 (Láser)">Sala 1 (Láser)</option>
+                <option value="Sala 2 (VIP)">Sala 2 (VIP)</option>
+                <option value="Sala 3 (Estándar)">Sala 3 (Estándar)</option>
+              </select>
+            </div>
+
+            <div class="campo">
+              <label for="inc-prioridad">Prioridad:</label>
+              <select id="inc-prioridad">
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+                <option value="Urgente">Urgente</option>
+              </select>
+            </div>
+
+            <div class="campo">
+              <label for="inc-problema">Descripción de la falla:</label>
+              <textarea id="inc-problema" rows="3" placeholder="Ej. El proyector se ve un poco oscuro..." required></textarea>
+            </div>
+
+            <button type="submit" class="btn-guardar">Levantar Reporte</button>
+          </form>
+        </div>
+
+        <div class="caja-tabla">
+          <h3>Bitácora de Reportes (Back-End)</h3>
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Sala</th>
+                <th>Problema</th>
+                <th>Prioridad</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-incidencias-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <p>Proyecto Inicial: Sistemas de Información — Universidad de Guanajuato (DICIS)</p>
+    <p>Alumno: Fernando Daniel Tolentino Uribe | Profesora: Mtra. Valentina Ugarte Ortíz</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
