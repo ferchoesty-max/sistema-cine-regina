@@ -18,6 +18,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tab) {
     verModulo(tab);
   }
+
+  // detecta si estamos en netlify o local
+  if (window.location.hostname.includes('netlify')) {
+    const statusEl = document.querySelector('.status-box');
+    if (statusEl) statusEl.innerHTML = '<strong>Estado:</strong> Cloud Serverless (Netlify) conectado';
+  }
 });
 
 // genera los cuadritos de los asientos
