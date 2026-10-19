@@ -5,3 +5,4 @@ __pycache__/
 env/
 .netlify/
 .DS_Store
+_agents/
