@@ -6,3 +6,6 @@ env/
 .netlify/
 .DS_Store
 _agents/
+docs/
+database/*.db
+database/verificacion_salida.txt
