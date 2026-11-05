@@ -3,110 +3,231 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cine Regina — Prototipo Inicial Front-End y Back-End</title>
+  <title>Cine Regina — Cartelera, Taquilla, Dulcería y Operaciones</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
+  <!-- Header principal 100% Cine Regina -->
   <header class="header">
-    <div class="logo-box">
-      <img src="img/logo.png" alt="Cine Regina" class="logo">
-      <div>
-        <h1>Cine Regina — Sistema de Información</h1>
-        <p>Prototipo Inicial: Integración de Front-End y Back-End</p>
+    <div class="header-inner">
+      <div class="logo-box" onclick="verModulo('taquilla'); volverACartelera();">
+        <img src="img/logo.png" alt="Cine Regina" class="logo" onerror="this.style.display='none'">
+        <div class="brand-text">
+          <div class="brand-title">CINE <span>REGINA</span></div>
+          <p class="brand-sub">SALAMANCA · COMPLEJO REGINA VIP</p>
+        </div>
       </div>
-    </div>
-    <div class="status-box">
-      <strong>Estado:</strong> Back-End en Python (Flask) conectado
+
+      <nav class="nav">
+        <button class="nav-btn active" onclick="verModulo('taquilla')">
+          Cartelera y Taquilla
+        </button>
+        <button class="nav-btn" onclick="verModulo('dulceria')">
+          Dulcería Express
+        </button>
+        <button class="nav-btn" onclick="verModulo('incidencias')">
+          Reporte de Sala
+        </button>
+      </nav>
     </div>
   </header>
 
-  <div id="mensaje-box" class="mensaje hidden"></div>
+  <!-- Carrusel Hero Dinámico que rota entre las películas de cartelera -->
+  <section class="hero-banner" id="hero-section">
+    <div class="hero-bg-layer" id="hero-bg-layer"></div>
+    <div class="hero-overlay"></div>
 
-  <nav class="nav">
-    <button class="nav-btn active" onclick="verModulo('taquilla')">1. Taquilla y Boletos</button>
-    <button class="nav-btn" onclick="verModulo('dulceria')">2. Dulcería Express</button>
-    <button class="nav-btn" onclick="verModulo('incidencias')">3. Reporte de Sala</button>
-  </nav>
+    <div class="hero-content">
+      <div class="hero-left-info">
+        <div class="hero-tags">
+          <span class="badge-red" id="hero-badge-estreno">ESTRENO EN CARTELERA</span>
+          <span class="badge-outline" id="hero-formato-badge">SALA 1 REGINA VIP · DOBLADA</span>
+          <span class="badge-gold" id="hero-clasif-badge">CLASIFICACIÓN B</span>
+        </div>
+        <h1 id="hero-title">LA VENGANZA DEL CHARRO NEGRO</h1>
+        <p id="hero-synopsis">
+          Leo San Juan y su equipo se enfrentan nuevamente al temible Charro Negro en una oscura batalla por las almas atrapadas en el inframundo.
+        </p>
+        <div class="hero-actions">
+          <button type="button" class="btn-cinemark" id="hero-btn-comprar" onclick="abrirSeleccionAsientos(1)">
+            Elegir Horario y Asientos
+          </button>
+          <button type="button" class="btn-trailer-hero" id="hero-btn-trailer" onclick="abrirTrailer('La Venganza del Charro Negro', 'IzynsBv2Dnw', 1)">
+            ▶ Ver Tráiler en Español
+          </button>
+        </div>
+      </div>
+
+      <div class="hero-poster-card">
+        <img id="hero-poster-img" src="https://m.media-amazon.com/images/M/MV5BMmEwMjkwZGQtZDNhMC00NzY2LTkyNTktNzZjYmMxZTI5MDNlXkEyXkFqcGc@._V1_FMjpg_UX600_.jpg" alt="Póster destacado">
+      </div>
+    </div>
+
+    <!-- Controles del carrusel superior -->
+    <div class="hero-carousel-controls">
+      <button type="button" class="hero-arrow" onclick="cambiarSlideHero(-1)" title="Anterior">‹</button>
+      <div id="hero-dots" class="hero-dots"></div>
+      <button type="button" class="hero-arrow" onclick="cambiarSlideHero(1)" title="Siguiente">›</button>
+    </div>
+  </section>
+
+  <!-- Notificación flotante -->
+  <div id="mensaje-box" class="mensaje hidden"></div>
 
   <main class="contenedor">
 
+    <!-- =================================================================== -->
+    <!-- MÓDULO 1: CARTELERA Y TAQUILLA                                      -->
+    <!-- =================================================================== -->
     <section id="modulo-taquilla" class="modulo">
-      <h2>Venta y Registro de Boletos</h2>
-      <p class="desc">El usuario captura los datos en el Front-End, se envían al servidor Flask en el Back-End y este calcula el total y guarda el registro.</p>
 
-      <div class="panel-grid">
-        <div class="caja-form">
-          <h3>Nuevo Registro de Boleto</h3>
-          <form id="form-boleto">
-            <div class="campo">
-              <label for="peli-select">Seleccionar Película:</label>
-              <select id="peli-select" required>
-              </select>
-            </div>
-
-            <div class="campo">
-              <label for="cliente-nombre">Nombre del Cliente:</label>
-              <input type="text" id="cliente-nombre" placeholder="Ej. Fernando Tolentino" required>
-            </div>
-
-            <div class="campo-doble">
-              <div class="campo">
-                <label for="boletos-cant">Cantidad:</label>
-                <input type="number" id="boletos-cant" value="0" min="1" max="10" readonly required>
-              </div>
-              <div class="campo">
-                <label for="asientos-txt">Asientos Seleccionados:</label>
-                <input type="text" id="asientos-txt" placeholder="Selecciona abajo..." readonly required>
-              </div>
-            </div>
-
-            <!-- mapa de asientos tipo cinepolis -->
-            <div class="campo">
-              <label>Mapa de Sala (Haz clic para elegir):</label>
-              <div class="mapa-cine">
-                <div class="leyenda-asientos">
-                  <span class="leyenda-item"><span class="cuadro-muestra amarillo"></span> Selección</span>
-                  <span class="leyenda-item"><span class="cuadro-muestra negro"></span> Ocupado</span>
-                  <span class="leyenda-item"><span class="cuadro-muestra azul"></span> Tradicional</span>
-                </div>
-                <div class="barra-pantalla">Pantalla</div>
-                <div id="grid-asientos" class="grid-asientos">
-                </div>
-              </div>
-            </div>
-
-            <button type="submit" class="btn-guardar">Registrar y Cobrar Boleto</button>
-          </form>
+      <!-- PASO 1: VISTA DE CARTELERA CON CARRETE DE FECHAS Y FUNCIONES -->
+      <div id="vista-cartelera">
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">EXPERIENCIA 100% REGINA VIP</span>
+            <h2>Cartelera Cine Regina</h2>
+            <p class="desc">Elige el día en el carrete de fechas y haz clic directamente en el horario de la función que prefieras para seleccionar tus asientos.</p>
+          </div>
         </div>
 
-        <div class="caja-tabla">
-          <h3>Boletos Almacenados en el Back-End</h3>
-          <table class="tabla">
-            <thead>
-              <tr>
-                <th>Folio</th>
-                <th>Cliente</th>
-                <th>Película</th>
-                <th>Horario</th>
-                <th>Asientos</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody id="tabla-boletos-body">
-            </tbody>
-          </table>
+        <!-- Carrete horizontal de fechas (6 días) -->
+        <div class="fechas-reel-wrapper">
+          <span class="reel-label">SELECCIONA EL DÍA DE TU FUNCIÓN:</span>
+          <div id="fechas-reel" class="fechas-reel">
+            <!-- Se genera dinámicamente desde app.js -->
+          </div>
+        </div>
+
+        <!-- Grid de pósters con múltiples horarios por día -->
+        <div id="cartelera-grid" class="cartelera-grid">
+          <!-- Se llena dinámicamente desde app.js -->
         </div>
       </div>
+
+      <!-- PASO 2: PANTALLA COMPLETA DE SELECCIÓN DE ASIENTOS POR FUNCIÓN -->
+      <div id="vista-seleccion-sala" class="vista-sala-fullscreen hidden">
+        <div class="sala-top-bar">
+          <button type="button" class="btn-volver-cartelera" onclick="volverACartelera()">
+            ← Volver a la Cartelera
+          </button>
+          <div class="sala-step-indicator">
+            <span class="eyebrow" id="sala-subtitulo-funcion">SALA 1 REGINA VIP · FUNCIÓN INDIVIDUAL</span>
+            <h2 id="sala-titulo-pelicula">Selecciona tus lugares en la sala</h2>
+          </div>
+          <div class="sala-precio-pill">
+            Boleto VIP: <strong id="precio-unitario-badge">$145.00 MXN</strong>
+          </div>
+        </div>
+
+        <!-- Selector rápido de fecha y horario dentro de la vista de sala -->
+        <div class="sala-funcion-switcher">
+          <div class="switcher-group">
+            <span class="switcher-label">Día de la función:</span>
+            <div id="sala-fechas-pills" class="sala-pills-row"></div>
+          </div>
+          <div class="switcher-group">
+            <span class="switcher-label">Horarios disponibles (cada horario tiene su propio mapa de sala):</span>
+            <div id="sala-horarios-pills" class="sala-pills-row"></div>
+          </div>
+        </div>
+
+        <div class="sala-layout-gigante">
+          <!-- Escenario de la sala y butacas a gran escala -->
+          <div class="auditorio-gigante">
+            <div class="leyenda-asientos-grande">
+              <span class="leyenda-item"><span class="cuadro-muestra azul"></span> Disponible</span>
+              <span class="leyenda-item"><span class="cuadro-muestra amarillo"></span> Tu Selección</span>
+              <span class="leyenda-item"><span class="cuadro-muestra negro"></span> Ocupado en esta función</span>
+            </div>
+
+            <div class="pantalla-cine-gigante">
+              <div class="barra-pantalla-gigante" id="texto-pantalla-sala">PANTALLA CINE REGINA · SALA 1 REGINA VIP</div>
+              <div class="luz-proyeccion"></div>
+            </div>
+
+            <div id="grid-asientos" class="grid-asientos-gigante">
+              <!-- Se genera en app.js para la función activa -->
+            </div>
+
+            <div class="pasillo-indicador">PASILLO DE ACCESO · BUTACAS RECLINABLES REGINA VIP</div>
+          </div>
+
+          <!-- Panel lateral de resumen de compra -->
+          <aside class="panel-checkout-boleto">
+            <div class="resumen-peli-header">
+              <img id="resumen-peli-poster" src="" alt="Póster">
+              <div>
+                <span class="badge-red" id="resumen-peli-clasif">CLASIFICACIÓN B</span>
+                <h3 id="resumen-peli-nombre">Película</h3>
+                <p id="resumen-peli-funcion">Sala 1 Regina VIP · 14:30 hrs</p>
+                <p id="resumen-peli-fecha" class="fecha-mini-label">Fecha: Hoy (04 Nov)</p>
+              </div>
+            </div>
+
+            <form id="form-boleto">
+              <div class="campo">
+                <label for="peli-select">Cambiar Película:</label>
+                <select id="peli-select" required>
+                </select>
+              </div>
+
+              <div class="campo">
+                <label for="cliente-nombre">Nombre del Cliente:</label>
+                <input type="text" id="cliente-nombre" placeholder="Ej. Fernando Tolentino" required>
+              </div>
+
+              <div class="campo-doble">
+                <div class="campo">
+                  <label for="boletos-cant">Boletos:</label>
+                  <input type="number" id="boletos-cant" value="0" min="1" max="10" readonly required>
+                </div>
+                <div class="campo">
+                  <label for="asientos-txt">Asientos Elegidos:</label>
+                  <input type="text" id="asientos-txt" placeholder="Toca las butacas..." readonly required>
+                </div>
+              </div>
+
+              <div class="caja-total-grande">
+                <span>Total a Pagar</span>
+                <strong id="total-estimado-txt">$0.00 MXN</strong>
+              </div>
+
+              <button type="submit" class="btn-guardar btn-cobrar-grande">
+                Confirmar Compra y Emitir Boleto
+              </button>
+            </form>
+          </aside>
+        </div>
+      </div>
+
     </section>
 
+    <!-- =================================================================== -->
+    <!-- MÓDULO 2: DULCERÍA EXPRESS (12 OPCIONES CON IMÁGENES EN LINK)       -->
+    <!-- =================================================================== -->
     <section id="modulo-dulceria" class="modulo hidden">
-      <h2>Dulcería y Preparación de Combos</h2>
-      <p class="desc">Simulación del envío de pedidos de alimentos a la cocina del cine mediante solicitudes HTTP POST.</p>
+      <div class="section-header">
+        <div>
+          <span class="eyebrow">MENÚ GOURMET Y TRADICIONAL</span>
+          <h2>Dulcería Express — 12 Opciones de Combos, Snacks y Bebidas</h2>
+          <p class="desc">Haz clic sobre cualquiera de los 12 productos del catálogo para seleccionarlo y enviarlo directo a preparación.</p>
+        </div>
+      </div>
+
+      <!-- Galería de 12 tarjetas de Dulcería con imágenes por link -->
+      <div id="dulceria-cards-grid" class="catalogo-cards-grid">
+        <!-- Se llena dinámicamente desde app.js -->
+      </div>
 
       <div class="panel-grid">
         <div class="caja-form">
-          <h3>Ordenar Combo o Bebida</h3>
+          <div class="form-header-bar">
+            <h3>Ordenar Producto o Combo</h3>
+            <span id="dulceria-precio-badge" class="badge-gold">$185.00 MXN</span>
+          </div>
+
           <form id="form-dulceria">
             <div class="campo">
               <label for="dulceria-cliente">Nombre del Cliente:</label>
@@ -114,102 +235,225 @@
             </div>
 
             <div class="campo">
-              <label for="dulceria-combo">Producto / Combo:</label>
+              <label for="dulceria-combo">Producto / Combo Seleccionado:</label>
               <select id="dulceria-combo">
-                <option value="Combo Pareja (Palomitas + 2 Refrescos)">Combo Pareja (Palomitas + 2 Refrescos) — $175.00</option>
-                <option value="Combo Individual (Palomitas medianas + Refresco)">Combo Individual (Palomitas medianas + Refresco) — $120.00</option>
-                <option value="Hot Dog Tradicional">Hot Dog Tradicional — $60.00</option>
+                <!-- Se llena automáticamente con las 12 opciones desde app.js -->
               </select>
             </div>
 
-            <div class="campo">
-              <label for="dulceria-cant">Cantidad:</label>
-              <input type="number" id="dulceria-cant" value="1" min="1" max="5" required>
+            <div class="campo-doble">
+              <div class="campo">
+                <label for="dulceria-cant">Cantidad:</label>
+                <input type="number" id="dulceria-cant" value="1" min="1" max="10" required>
+              </div>
+              <div class="campo">
+                <label>Vista Previa:</label>
+                <div class="mini-preview-box">
+                  <img id="dulceria-preview-img" src="https://images.unsplash.com/photo-1585647347483-22b66260dfff?auto=format&fit=crop&w=500&q=80" alt="Combo">
+                  <span id="dulceria-subtotal-txt">Total: $185.00</span>
+                </div>
+              </div>
             </div>
 
-            <button type="submit" class="btn-guardar">Enviar Pedido a Cocina</button>
+            <button type="submit" class="btn-guardar">Confirmar Pedido de Dulcería</button>
           </form>
         </div>
 
         <div class="caja-tabla">
-          <h3>Órdenes en Cocina (Back-End)</h3>
-          <table class="tabla">
-            <thead>
-              <tr>
-                <th>Folio</th>
-                <th>Cliente</th>
-                <th>Producto</th>
-                <th>Cant.</th>
-                <th>Total</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="tabla-dulceria-body">
-            </tbody>
-          </table>
+          <div class="form-header-bar">
+            <h3>Pedidos Activos en Dulcería</h3>
+            <span class="badge-subtle">Servicio a Sala VIP y Mostrador</span>
+          </div>
+          <div class="tabla-scroll">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Folio</th>
+                  <th>Producto</th>
+                  <th>Cliente</th>
+                  <th>Combo / Alimento</th>
+                  <th>Cant.</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-dulceria-body">
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
 
+    <!-- =================================================================== -->
+    <!-- MÓDULO 3: REPORTE DE INCIDENCIAS EN SALA (8 CATEGORÍAS VISUALES)    -->
+    <!-- =================================================================== -->
     <section id="modulo-incidencias" class="modulo hidden">
-      <h2>Reporte de Incidencias en Sala</h2>
-      <p class="desc">Canal de comunicación entre el usuario/staff y el personal técnico para atender quejas de clima, audio o proyección.</p>
+      <div class="section-header">
+        <div>
+          <span class="eyebrow">ATENCIÓN Y MANTENIMIENTO DE SALAS VIP</span>
+          <h2>Reporte de Incidencias en Sala — 8 Categorías Operativas</h2>
+          <p class="desc">Selecciona cualquiera de las 8 áreas operativas de la sala para prellenar el reporte y enviarlo al equipo de supervisión.</p>
+        </div>
+      </div>
+
+      <!-- 8 Tarjetas visuales de áreas técnicas con imágenes por link -->
+      <div id="incidencias-cards-grid" class="incidencias-cards-grid">
+        <!-- Se llena dinámicamente desde app.js -->
+      </div>
 
       <div class="panel-grid">
         <div class="caja-form">
-          <h3>Reportar Problema Técnico</h3>
+          <div class="form-header-bar">
+            <h3>Registrar Reporte de Sala</h3>
+            <span id="inc-categoria-badge" class="badge-red">Área: Proyección</span>
+          </div>
+
           <form id="form-incidencia">
-            <div class="campo">
-              <label for="inc-sala">Sala:</label>
-              <select id="inc-sala">
-                <option value="Sala 1 (Láser)">Sala 1 (Láser)</option>
-                <option value="Sala 2 (VIP)">Sala 2 (VIP)</option>
-                <option value="Sala 3 (Estándar)">Sala 3 (Estándar)</option>
-              </select>
+            <input type="hidden" id="inc-categoria" value="Proyección">
+            <input type="hidden" id="inc-imagen" value="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=500&q=80">
+
+            <div class="campo-doble">
+              <div class="campo">
+                <label for="inc-sala">Sala Regina VIP:</label>
+                <select id="inc-sala">
+                  <option value="Sala 1 Regina VIP">Sala 1 Regina VIP</option>
+                  <option value="Sala 2 Regina VIP">Sala 2 Regina VIP</option>
+                  <option value="Sala 3 Regina VIP">Sala 3 Regina VIP</option>
+                  <option value="Sala 4 Regina VIP">Sala 4 Regina VIP</option>
+                  <option value="Sala 5 Regina VIP">Sala 5 Regina VIP</option>
+                  <option value="Sala 6 Regina VIP">Sala 6 Regina VIP</option>
+                </select>
+              </div>
+
+              <div class="campo">
+                <label for="inc-prioridad">Prioridad:</label>
+                <select id="inc-prioridad">
+                  <option value="Baja">Baja</option>
+                  <option value="Media">Media</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Urgente">Urgente</option>
+                </select>
+              </div>
             </div>
 
             <div class="campo">
-              <label for="inc-prioridad">Prioridad:</label>
-              <select id="inc-prioridad">
-                <option value="Media">Media</option>
-                <option value="Alta">Alta</option>
-                <option value="Urgente">Urgente</option>
-              </select>
+              <label for="inc-problema">Descripción del Problema:</label>
+              <textarea id="inc-problema" rows="3" placeholder="Ej. El proyector láser presenta ligero desenfoque en la esquina superior..." required></textarea>
             </div>
 
             <div class="campo">
-              <label for="inc-problema">Descripción de la falla:</label>
-              <textarea id="inc-problema" rows="3" placeholder="Ej. El proyector se ve un poco oscuro..." required></textarea>
+              <label>Categoría Seleccionada:</label>
+              <div class="mini-preview-box">
+                <img id="inc-preview-img" src="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=500&q=80" alt="Área técnica">
+                <span id="inc-preview-label">Proyección y Pantalla Láser 4K</span>
+              </div>
             </div>
 
-            <button type="submit" class="btn-guardar">Levantar Reporte</button>
+            <button type="submit" class="btn-guardar">Enviar Reporte a Mantenimiento</button>
           </form>
         </div>
 
         <div class="caja-tabla">
-          <h3>Bitácora de Reportes (Back-End)</h3>
-          <table class="tabla">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Sala</th>
-                <th>Problema</th>
-                <th>Prioridad</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="tabla-incidencias-body">
-            </tbody>
-          </table>
+          <div class="form-header-bar">
+            <h3>Bitácora de Reportes de Sala</h3>
+            <span class="badge-subtle">Monitoreo de las 6 Salas Regina VIP</span>
+          </div>
+          <div class="tabla-scroll">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Folio</th>
+                  <th>Área</th>
+                  <th>Sala</th>
+                  <th>Descripción</th>
+                  <th>Prioridad</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-incidencias-body">
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
 
   </main>
 
+  <!-- ===================================================================== -->
+  <!-- MODAL EMERGENTE DE TRÁILER DE YOUTUBE EN ESPAÑOL                      -->
+  <!-- ===================================================================== -->
+  <div id="modal-trailer" class="modal-backdrop hidden" onclick="cerrarTrailerSiFondo(event)">
+    <div class="modal-card modal-video">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">TRÁILER EN ESPAÑOL · CINE REGINA</span>
+          <h3 id="modal-trailer-titulo">Tráiler Oficial</h3>
+        </div>
+        <button type="button" class="btn-cerrar-modal" onclick="cerrarTrailer()">✕ Cerrar</button>
+      </div>
+      <div class="video-wrapper">
+        <iframe
+          id="youtube-iframe"
+          src=""
+          title="Reproductor de Tráiler YouTube"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen>
+        </iframe>
+      </div>
+      <div class="modal-footer-bar">
+        <span id="modal-trailer-info">Funciones disponibles en Salas Regina VIP</span>
+        <button type="button" class="btn-cinemark btn-sm" id="btn-modal-comprar">
+          Elegir Horario y Asientos
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL DE COMPROBANTE DE BOLETO DIGITAL                                -->
+  <!-- ===================================================================== -->
+  <div id="modal-boleto" class="modal-backdrop hidden" onclick="cerrarModalBoletoSiFondo(event)">
+    <div class="modal-card modal-ticket">
+      <div class="ticket-top-ribbon">BOLETO DIGITAL CINE REGINA VIP</div>
+      <div class="ticket-body">
+        <h3 id="ticket-pelicula">Película</h3>
+        <p class="ticket-folio" id="ticket-folio">FOLIO: CR-TK-105</p>
+        <div class="ticket-grid">
+          <div>
+            <span class="t-label">CLIENTE</span>
+            <strong id="ticket-cliente">Fernando Tolentino</strong>
+          </div>
+          <div>
+            <span class="t-label">SALA Y FUNCIÓN</span>
+            <strong id="ticket-sala">Sala 1 Regina VIP · 14:30</strong>
+          </div>
+          <div>
+            <span class="t-label">ASIENTOS VIP</span>
+            <strong id="ticket-asientos" class="gold-text">C4, C5</strong>
+          </div>
+          <div>
+            <span class="t-label">TOTAL PAGADO</span>
+            <strong id="ticket-total" class="red-text">$290.00 MXN</strong>
+          </div>
+        </div>
+        <div class="ticket-barcode">||| |||| || ||||| |||| ||| |||| || |||</div>
+      </div>
+      <button type="button" class="btn-guardar" onclick="cerrarModalBoleto()">Cerrar Comprobante</button>
+    </div>
+  </div>
+
   <footer class="footer">
-    <p>Proyecto Inicial: Sistemas de Información — Universidad de Guanajuato (DICIS)</p>
-    <p>Alumno: Fernando Daniel Tolentino Uribe | Profesora: Mtra. Valentina Ugarte Ortíz</p>
+    <div class="footer-inner">
+      <div>
+        <strong>CINE REGINA VIP</strong> — Sistema de Gestión de Taquilla, Dulcería y Salas
+      </div>
+      <div>
+        Universidad de Guanajuato (DICIS) · Fernando Daniel Tolentino Uribe
+      </div>
+    </div>
   </footer>
 
   <script src="js/app.js"></script>
