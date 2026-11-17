@@ -133,3 +133,14 @@ VALUES
     (2, 'CR-INC-502', 1, 1, 'Audio',
         'La bocina lateral izquierda trasera vibra en los sonidos graves.',
         'Media', 'Pendiente', '2026-10-19 16:05:00', NULL, NULL);
+
+-- ----------------------------------------------------------------------------
+-- Usuarios y roles de acceso (contraseña con hash SHA-256)
+-- ----------------------------------------------------------------------------
+INSERT INTO usuarios (id_usuario, username, password_hash, nombre, rol, activo) VALUES
+    (1, 'gerente', 'e94d810933f7ea8151d5c1a85ec5a9d6c4390bbb00c36991313b60b0deb9d6df',
+        'Fernando Tolentino (Gerente)', 'gerente', 1),
+    (2, 'staff',   '49cf21a443a3bcd6ea37f94a1896db8fc62056808025a6d4ed450888cf2039ab',
+        'Carlos Ramírez (Staff)', 'staff', 1),
+    (3, 'cliente', '19d701a184ebe5a0f9721d8acd219444932ddf2b8b8b85802e97b93c2c4c98d1',
+        'Luis Mendoza (Cliente VIP)', 'cliente', 1);

@@ -1,27 +1,60 @@
-# Cine Regina - Sistema de Informacion
+# Cine Regina SI (Sistema de Información Integral)
 
-Este proyecto es una simulacion funcional y prototipo de sistema de informacion para la empresa Cine Regina (Caso 20). Se desarrollo para la materia de Sistemas de Informacion en la Universidad de Guanajuato (DICIS, Salamanca).
+Sistema de Información web completo y ejecutable desarrollado para la materia **Sistemas de Información** en la Universidad de Guanajuato (Campus Irapuato, Salamanca, DICIS), aplicando el **Caso 20: Empresa basada en datos**.
 
-La idea principal fue integrar la parte del Front-End con el Back-End para ver como interactuan los datos entre la pantalla del usuario y el servidor.
+El sistema integra las cinco unidades del curso: flujo e información de valor (Unidad 1), clasificación TPS/MIS/DSS (Unidad 2), arquitectura cliente servidor de tres capas (Unidad 3), base de datos relacional normalizada en SQLite con 14 tablas (Unidad 4) y desarrollo ágil bajo Scrumban y prácticas XP (Unidad 5).
 
-## Modulos del sistema
+## Módulos del Sistema
 
-- Taquilla y seleccion de asientos: permite elegir las butacas de forma visual en la sala (tipo mapa de cine), calculando el costo total y registrando el boleto en el servidor.
-- Dulceria express: formulario para pedir combos o alimentos y mandar la orden a cocina para su preparacion.
-- Reporte de incidencias: modulo para registrar problemas tecnicos en salas (proyeccion, sonido o clima) y darle seguimiento.
+1. **Cartelera y Taquilla VIP**: carrusel de estrenos, carrete de fechas, modal de tráilers en YouTube, mapa interactivo de butacas por función, emisión de boleto digital con folio único (`CR-TK-XXX`) e historial de boletos con búsqueda y cancelación que libera asientos en SQLite.
+2. **Dulcería Express**: catálogo visual de 12 combos, snacks y bebidas; registro de órdenes para cocina (`CR-DL-XXX`) con descuento automático de inventario de ingredientes (`insumos`) usando la tabla de recetas `producto_insumo`, actualización de estado y eliminación.
+3. **Reporte de Sala**: 8 categorías técnicas operativas, registro de fallas por sala y prioridad (`CR-INC-XXX`), bitácora con avance de estado hasta resolución y eliminación de reportes.
+4. **Panel Gerencial y Base de Datos SQLite (MIS / DSS)**: indicadores en tiempo real (ingresos de taquilla y dulcería, boletos pagados, comandas e incidencias), monitor del motor SQLite con el conteo vivo de las 14 tablas, consulta a la vista analítica `vista_ocupacion_funciones` con sugerencias comerciales y resurtido directo de insumos en bodega.
 
-## Estructura del proyecto
+## Roles de Acceso y Control de Permisos
 
-- frontend/: contiene la interfaz hecha con HTML, CSS y JavaScript vanilla (usando Fetch para comunicarse con el servidor).
-- backend/: servidor en Python usando Flask (app.py) para correrlo de forma local en la computadora.
-- netlify/: funciones serverless para que el sistema tambien pueda responder peticiones en la nube sin necesidad de tener un servidor prendido.
+Al abrir la aplicación web aparece el selector de acceso (`Cliente` vs `Personal / Gerencia`), respaldado por la tabla `usuarios` (contraseñas con hash SHA-256) y tokens HMAC-SHA256 verificados en Flask y Netlify:
 
-## Como correrlo en local
+- **Cliente / Invitado** (sin contraseña): consulta cartelera y compra boletos/dulcería, reporta fallas en su sala y solo ve sus propios folios de sesión o búsquedas por folio exacto. El panel gerencial y los botones internos de cocina quedan ocultos.
+- **Staff Operativo** (`usuario: staff`, `contraseña: staff2026`): atiende taquilla, cola completa de dulcería y bitácora de incidencias con botones de avance de estado y cancelación/eliminación.
+- **Gerente** (`usuario: gerente`, `contraseña: regina2026`): acceso completo, incluyendo la pestaña `Panel Gerencial y BD` y el resurtido de bodega (`insumos`).
 
-1. Dar doble clic al archivo `run_sistema.bat` (o abrir terminal y poner `python backend/app.py`).
-2. Abrir en el navegador la direccion: http://localhost:5000
+## Estructura del Proyecto
 
-## Deploy en linea
+- `frontend/`: interfaz SPA en HTML5, CSS3 y JavaScript nativo con Fetch API (`index.html`, `css/style.css`, `js/app.js`, `img/logo.png`).
+- `backend/`: servidor Flask en Python (`app.py`), módulo conector a SQLite (`db.py`) y dependencias (`requirements.txt`).
+- `database/`: esquema relacional (`schema.sql`), datos semilla (`seed.sql`), script automatizado de reconstrucción y pruebas (`verificar_bd.py`), archivo de base de datos (`cine_regina.db`) y evidencia de verificación (`verificacion_salida.txt`).
+- `netlify/`: función serverless (`functions/api.mjs`) y `netlify.toml` para demostración en la nube.
+- `run_sistema.bat`: lanzador rápido de un clic en Windows.
 
-El sistema tambien esta montado en Netlify para poder probarlo directamente desde el navegador:
-https://cine-regina.netlify.app
+## Requisitos e Instalación
+
+1. Tener instalado **Python 3.10 o superior**.
+2. Instalar Flask (única dependencia externa):
+   ```powershell
+   pip install -r backend/requirements.txt
+   ```
+
+## Cómo Reconstruir y Verificar la Base de Datos
+
+Para generar desde cero `database/cine_regina.db` con sus 14 tablas, llaves foráneas, disparadores y la vista `vista_ocupacion_funciones`, además de correr las 4 pruebas de integridad:
+
+```powershell
+python database/verificar_bd.py
+```
+
+Al arrancar el servidor web, `backend/app.py` verifica automáticamente que exista la base de datos y sincroniza las salas VIP, funciones del carrete y catálogo de productos sin perder tus registros.
+
+## Cómo Ejecutar el Sistema en Local
+
+- **Opción rápida (Windows)**: dar doble clic en `run_sistema.bat`.
+- **Desde terminal**:
+  ```powershell
+  python backend/app.py
+  ```
+- Abrir en el navegador web: `http://localhost:5000`
+
+## Despliegue en Línea
+
+- **Demo en Netlify**: https://cine-regina.netlify.app
+- **Repositorio en GitHub**: https://github.com/ferchoesty-max/sistema-cine-regina

@@ -10,6 +10,52 @@ let asientosSeleccionados = new Set();
 
 let heroIndex = 0;
 let heroTimer = null;
+let listaBoletosCache = [];
+let authToken = sessionStorage.getItem('cine_auth_token') || '';
+let usuarioActual = { rol: 'cliente', nombre: 'Cliente / Invitado', username: 'invitado', autenticado: false };
+let ultimoFolioConsultado = '';
+
+function cargarFoliosLocales(clave) {
+  try {
+    const arr = JSON.parse(sessionStorage.getItem(clave) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function guardarFolioLocal(clave, folio) {
+  if (!folio) return;
+  const actuales = cargarFoliosLocales(clave);
+  if (!actuales.includes(folio)) {
+    actuales.unshift(folio);
+    sessionStorage.setItem(clave, JSON.stringify(actuales.slice(0, 50)));
+  }
+}
+
+function esOperador() {
+  return usuarioActual.rol === 'staff' || usuarioActual.rol === 'gerente';
+}
+
+function esGerente() {
+  return usuarioActual.rol === 'gerente';
+}
+
+function apiFetch(url, opciones = {}) {
+  const headers = new Headers(opciones.headers || {});
+  if (authToken) {
+    headers.set('Authorization', `Bearer ${authToken}`);
+  }
+  return fetch(url, { ...opciones, headers });
+}
+
+function esc(txt) {
+  return String(txt ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 // 12 opciones visuales de dulceria con imagenes por link ligero
 const CATALOGO_DULCERIA = [
@@ -187,16 +233,27 @@ const CATALOGO_INCIDENCIAS = [
   }
 ];
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await verificarSesionInicial();
+  aplicarPermisosUI();
+
   renderizarTarjetasDulceria();
   renderizarTarjetasIncidencias();
   cargarCartelera();
+  cargarBoletos();
   cargarDulceria();
   cargarIncidencias();
+  if (esGerente()) {
+    cargarDashboard();
+  }
 
   document.getElementById('form-boleto').addEventListener('submit', registrarBoleto);
   document.getElementById('form-dulceria').addEventListener('submit', ordenarDulceria);
   document.getElementById('form-incidencia').addEventListener('submit', reportarIncidencia);
+  const formLogin = document.getElementById('form-login');
+  if (formLogin) {
+    formLogin.addEventListener('submit', iniciarSesionTrabajador);
+  }
 
   const selectPeli = document.getElementById('peli-select');
   if (selectPeli) {
@@ -215,13 +272,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       cerrarTrailer();
       cerrarModalBoleto();
+      cerrarModalAcceso();
     }
   });
 
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
   if (tab) {
-    verModulo(tab);
+    verModulo(tab === 'bd' && !esGerente() ? 'taquilla' : tab);
+  }
+
+  if (params.get('acceso') === '1' || !sessionStorage.getItem('cine_rol_elegido')) {
+    abrirModalAcceso();
   }
 });
 
@@ -671,25 +733,228 @@ function actualizarPrecioSeleccionado() {
 // NAVEGACIÓN ENTRE MÓDULOS Y VISTAS
 // =========================================================================
 function verModulo(nombre) {
-  const modulos = ['taquilla', 'dulceria', 'incidencias'];
+  if (nombre === 'bd' && !esGerente()) {
+    mostrarMensaje('El Panel Gerencial y BD solo está disponible para el rol de Gerente.', 'error');
+    abrirModalAcceso();
+    nombre = 'taquilla';
+  }
+
+  const modulos = ['taquilla', 'dulceria', 'incidencias', 'bd'];
   modulos.forEach(m => {
     const el = document.getElementById(`modulo-${m}`);
     if (el) el.classList.add('hidden');
+    const btn = document.getElementById(`nav-btn-${m}`);
+    if (btn) btn.classList.toggle('active', m === nombre);
   });
 
   const seleccionado = document.getElementById(`modulo-${nombre}`);
   if (seleccionado) seleccionado.classList.remove('hidden');
-
-  const botones = document.querySelectorAll('.nav-btn');
-  botones.forEach((btn, idx) => {
-    btn.classList.toggle('active', modulos[idx] === nombre);
-  });
 
   const hero = document.getElementById('hero-section');
   if (hero) {
     const enSala = !document.getElementById('vista-seleccion-sala')?.classList.contains('hidden');
     hero.classList.toggle('hidden', nombre !== 'taquilla' || enSala);
   }
+
+  if (nombre === 'bd' && esGerente()) {
+    cargarDashboard();
+  }
+}
+
+// =========================================================================
+// CONTROL DE ACCESO POR ROLES (CLIENTE / STAFF / GERENTE)
+// =========================================================================
+async function verificarSesionInicial() {
+  if (!authToken) {
+    usuarioActual = { rol: 'cliente', nombre: 'Cliente / Invitado', username: 'invitado', autenticado: false };
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/auth/me');
+    const data = await res.json();
+    if (res.ok && data.autenticado && data.usuario) {
+      usuarioActual = { ...data.usuario, autenticado: true };
+      sessionStorage.setItem('cine_rol_elegido', '1');
+      return;
+    }
+  } catch (err) {
+    console.error('Error al verificar sesión:', err);
+  }
+  authToken = '';
+  sessionStorage.removeItem('cine_auth_token');
+  usuarioActual = { rol: 'cliente', nombre: 'Cliente / Invitado', username: 'invitado', autenticado: false };
+}
+
+function aplicarPermisosUI() {
+  const pill = document.getElementById('role-badge-pill');
+  const btnAcceso = document.getElementById('btn-abrir-acceso');
+  const navBd = document.getElementById('nav-btn-bd');
+  const thDulcAcc = document.getElementById('th-dulceria-acciones');
+  const thIncAcc = document.getElementById('th-incidencias-acciones');
+
+  if (pill) {
+    pill.classList.remove('role-cliente', 'role-staff', 'role-gerente');
+    if (esGerente()) {
+      pill.classList.add('role-gerente');
+      pill.textContent = `Gerente: ${usuarioActual.nombre}`;
+    } else if (usuarioActual.rol === 'staff') {
+      pill.classList.add('role-staff');
+      pill.textContent = `Staff: ${usuarioActual.nombre}`;
+    } else {
+      pill.classList.add('role-cliente');
+      pill.textContent = 'Modo: Cliente';
+    }
+  }
+
+  if (btnAcceso) {
+    btnAcceso.textContent = usuarioActual.autenticado ? 'Cambiar Perfil' : 'Acceso Staff / Gerente';
+  }
+  if (navBd) {
+    navBd.classList.toggle('hidden', !esGerente());
+  }
+  if (thDulcAcc) {
+    thDulcAcc.classList.toggle('hidden', !esOperador());
+  }
+  if (thIncAcc) {
+    thIncAcc.classList.toggle('hidden', !esOperador());
+  }
+
+  const titBol = document.getElementById('titulo-historial-boletos');
+  const subBol = document.getElementById('subtitulo-historial-boletos');
+  if (titBol && subBol) {
+    titBol.textContent = esOperador() ? 'Boletos Emitidos en SQLite' : 'Mis Boletos Comprados';
+    subBol.textContent = esOperador()
+      ? 'Historial operativo completo en SQLite para validar o cancelar boletos en taquilla.'
+      : 'Consulta tus boletos de esta sesión o busca un folio específico (ej. CR-TK-0001).';
+  }
+
+  const titDul = document.getElementById('titulo-tabla-dulceria');
+  const subDul = document.getElementById('subtitulo-tabla-dulceria');
+  if (titDul && subDul) {
+    titDul.textContent = esOperador() ? 'Cola Operativa de Dulcería' : 'Mis Pedidos de Dulcería';
+    subDul.textContent = esOperador()
+      ? 'Todos los pedidos registrados en base de datos para preparación y entrega.'
+      : 'Estado en tiempo real de los combos que solicitaste en esta sesión.';
+  }
+
+  const titInc = document.getElementById('titulo-tabla-incidencias');
+  const subInc = document.getElementById('subtitulo-tabla-incidencias');
+  if (titInc && subInc) {
+    titInc.textContent = esOperador() ? 'Bitácora de Soporte Técnico' : 'Mis Reportes en Sala';
+    subInc.textContent = esOperador()
+      ? 'Incidencias de sala registradas en SQLite para atención técnica.'
+      : 'Envía un aviso de sala y revisa el avance de los folios reportados en tu sesión.';
+  }
+
+  const sesionFooter = document.getElementById('sesion-activa-footer');
+  const sesionTexto = document.getElementById('sesion-activa-texto');
+  if (sesionFooter && sesionTexto) {
+    sesionFooter.classList.toggle('hidden', !usuarioActual.autenticado);
+    if (usuarioActual.autenticado) {
+      sesionTexto.textContent = `Sesión activa: ${usuarioActual.nombre} (${usuarioActual.rol.toUpperCase()})`;
+    }
+  }
+
+  const modBdVisible = !document.getElementById('modulo-bd')?.classList.contains('hidden');
+  if (modBdVisible && !esGerente()) {
+    verModulo('taquilla');
+  }
+}
+
+function abrirModalAcceso() {
+  const modal = document.getElementById('modal-acceso');
+  const errBox = document.getElementById('login-error-box');
+  if (errBox) {
+    errBox.classList.add('hidden');
+    errBox.textContent = '';
+  }
+  aplicarPermisosUI();
+  if (modal) modal.classList.remove('hidden');
+}
+
+function cerrarModalAcceso() {
+  sessionStorage.setItem('cine_rol_elegido', '1');
+  const modal = document.getElementById('modal-acceso');
+  if (modal) modal.classList.add('hidden');
+}
+
+function cerrarModalAccesoSiFondo(event) {
+  if (event.target && event.target.id === 'modal-acceso') {
+    cerrarModalAcceso();
+  }
+}
+
+function rellenarDemoLogin(user, pwd) {
+  const u = document.getElementById('login-username');
+  const p = document.getElementById('login-password');
+  if (u) u.value = user;
+  if (p) p.value = pwd;
+}
+
+async function entrarComoCliente() {
+  authToken = '';
+  sessionStorage.removeItem('cine_auth_token');
+  sessionStorage.setItem('cine_rol_elegido', '1');
+  usuarioActual = { rol: 'cliente', nombre: 'Cliente / Invitado', username: 'invitado', autenticado: false };
+  aplicarPermisosUI();
+  cerrarModalAcceso();
+  await Promise.all([cargarBoletos(), cargarDulceria(), cargarIncidencias()]);
+  verModulo('taquilla');
+  mostrarMensaje('Vista de Cliente activada: solo ves tus propios folios y la cartelera.', 'exito');
+}
+
+async function iniciarSesionTrabajador(e) {
+  e.preventDefault();
+  const username = (document.getElementById('login-username')?.value || '').trim();
+  const password = document.getElementById('login-password')?.value || '';
+  const errBox = document.getElementById('login-error-box');
+
+  if (errBox) {
+    errBox.classList.add('hidden');
+    errBox.textContent = '';
+  }
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (errBox) {
+        errBox.textContent = data.mensaje || 'Usuario o contraseña incorrectos.';
+        errBox.classList.remove('hidden');
+      }
+      return;
+    }
+
+    authToken = data.token;
+    sessionStorage.setItem('cine_auth_token', authToken);
+    sessionStorage.setItem('cine_rol_elegido', '1');
+    usuarioActual = { ...data.usuario, autenticado: true };
+
+    const pwdEl = document.getElementById('login-password');
+    if (pwdEl) pwdEl.value = '';
+
+    aplicarPermisosUI();
+    cerrarModalAcceso();
+    await Promise.all([cargarBoletos(), cargarDulceria(), cargarIncidencias()]);
+    if (esGerente()) {
+      cargarDashboard();
+    }
+    mostrarMensaje(`Bienvenido ${usuarioActual.nombre} (${usuarioActual.rol}).`, 'exito');
+  } catch (err) {
+    console.error('Error al iniciar sesión:', err);
+    if (errBox) {
+      errBox.textContent = 'No se pudo conectar con el servidor de autenticación.';
+      errBox.classList.remove('hidden');
+    }
+  }
+}
+
+async function cerrarSesion() {
+  await entrarComoCliente();
 }
 
 function volverACartelera() {
@@ -755,30 +1020,113 @@ function cerrarTrailerSiFondo(e) {
 // =========================================================================
 // REGISTRO Y TABLA DE BOLETOS + MODAL DE BOLETO DIGITAL
 // =========================================================================
-async function cargarBoletos() {
+async function cargarBoletos(folioExacto = '') {
   try {
-    const res = await fetch('/api/boletos');
+    let url = '/api/boletos';
+    if (!esOperador()) {
+      const params = new URLSearchParams();
+      const folios = cargarFoliosLocales('cine_mis_boletos');
+      if (folios.length) params.set('folios', folios.join(','));
+      if (folioExacto) params.set('folio', folioExacto);
+      url = `/api/boletos?${params.toString()}`;
+    }
+    const res = await apiFetch(url);
     const data = await res.json();
-    const tbody = document.getElementById('tabla-boletos-body');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-
-    (data.boletos || []).forEach(b => {
-      const fechaMostrada = b.fecha ? `${b.fecha} · ` : '';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><strong class="gold-text">${b.folio}</strong></td>
-        <td>${b.cliente}</td>
-        <td><strong>${b.pelicula}</strong></td>
-        <td>${fechaMostrada}${b.horario} hrs</td>
-        <td><span style="color:#cbd5e1">${b.sala}</span></td>
-        <td><span class="status-pill prep">${b.asientos}</span></td>
-        <td><strong>$${Number(b.total).toFixed(2)}</strong></td>
-      `;
-      tbody.appendChild(tr);
-    });
+    listaBoletosCache = data.boletos || [];
+    filtrarTablaBoletos();
   } catch (err) {
     console.error('Error al cargar boletos:', err);
+  }
+}
+
+function filtrarTablaBoletos() {
+  const input = document.getElementById('buscar-boleto-input');
+  const q = (input ? input.value : '').trim().toLowerCase();
+  if (!q) {
+    ultimoFolioConsultado = '';
+    renderizarTablaBoletos(listaBoletosCache);
+    return;
+  }
+
+  const folioMayus = q.toUpperCase();
+  if (!esOperador() && /^CR-TK-\d{4,}$/.test(folioMayus)) {
+    const yaEsta = listaBoletosCache.some(b => (b.folio || '').toUpperCase() === folioMayus);
+    if (!yaEsta && ultimoFolioConsultado !== folioMayus) {
+      ultimoFolioConsultado = folioMayus;
+      cargarBoletos(folioMayus);
+      return;
+    }
+  }
+
+  const filtrados = listaBoletosCache.filter(b =>
+    (b.folio || '').toLowerCase().includes(q) ||
+    (b.cliente || '').toLowerCase().includes(q) ||
+    (b.pelicula || '').toLowerCase().includes(q) ||
+    (b.sala || '').toLowerCase().includes(q)
+  );
+  renderizarTablaBoletos(filtrados);
+}
+
+function renderizarTablaBoletos(lista) {
+  const tbody = document.getElementById('tabla-boletos-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!lista.length) {
+    const msg = esOperador()
+      ? 'No hay boletos que coincidan con la búsqueda.'
+      : 'Aún no tienes boletos en esta sesión. Compra uno arriba o escribe tu folio (ej. CR-TK-0001).';
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8;">${msg}</td></tr>`;
+    return;
+  }
+
+  lista.forEach(b => {
+    const fechaMostrada = b.fecha ? `${b.fecha} · ` : '';
+    const estado = b.estado || 'Pagado';
+    const esCancelado = estado === 'Cancelado';
+    const pillClass = esCancelado ? 'cancel' : 'ready';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong class="gold-text">${esc(b.folio)}</strong></td>
+      <td>${esc(b.cliente)}</td>
+      <td><strong>${esc(b.pelicula)}</strong></td>
+      <td>${esc(fechaMostrada)}${esc(b.horario)} hrs</td>
+      <td><span style="color:#cbd5e1">${esc(b.sala)}</span></td>
+      <td><span class="status-pill ${esCancelado ? 'cancel' : 'prep'}">${esc(b.asientos)}</span></td>
+      <td><strong>$${Number(b.total).toFixed(2)}</strong></td>
+      <td><span class="status-pill ${pillClass}">${esc(estado)}</span></td>
+      <td>
+        <div class="acciones-celda">
+          <button type="button" class="btn-tabla-accion" onclick="verTicketPorFolio('${esc(b.folio)}')">Ticket</button>
+          ${esCancelado ? '' : `<button type="button" class="btn-tabla-danger" onclick="cancelarBoleto('${esc(b.folio)}')">Cancelar</button>`}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function verTicketPorFolio(folio) {
+  const b = listaBoletosCache.find(item => item.folio === folio);
+  if (b) {
+    mostrarModalBoleto(b);
+  }
+}
+
+async function cancelarBoleto(folio) {
+  try {
+    const res = await apiFetch(`/api/boletos/${encodeURIComponent(folio)}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (res.ok) {
+      mostrarMensaje(result.mensaje, 'exito');
+      const tareas = [cargarBoletos(), cargarCartelera()];
+      if (esGerente()) tareas.push(cargarDashboard());
+      await Promise.all(tareas);
+    } else {
+      mostrarMensaje(result.mensaje || 'No se pudo cancelar el boleto', 'error');
+    }
+  } catch (err) {
+    console.error('Error al cancelar boleto:', err);
   }
 }
 
@@ -794,12 +1142,12 @@ async function registrarBoleto(e) {
   const asientos = document.getElementById('asientos-txt').value.trim();
 
   if (!cantidad || !asientos) {
-    mostrarMensaje('Selecciona al menos un asiento en el mapa de la sala antes de confirmar.', 'exito');
+    mostrarMensaje('Selecciona al menos un asiento en el mapa de la sala antes de confirmar.', 'error');
     return;
   }
 
   try {
-    const res = await fetch('/api/boletos/reservar', {
+    const res = await apiFetch('/api/boletos/reservar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -819,6 +1167,10 @@ async function registrarBoleto(e) {
       document.getElementById('asientos-txt').value = '';
       document.getElementById('boletos-cant').value = 0;
 
+      if (result.boleto && result.boleto.folio) {
+        guardarFolioLocal('cine_mis_boletos', result.boleto.folio);
+      }
+
       if (result.asientos_ocupados_funcion && funcion_id) {
         mapaAsientosPorFuncion[funcion_id] = result.asientos_ocupados_funcion;
       } else if (funcion_id) {
@@ -831,10 +1183,15 @@ async function registrarBoleto(e) {
       generarMapaAsientos();
       actualizarPrecioSeleccionado();
       cargarBoletos();
+      if (esGerente()) cargarDashboard();
 
       if (result.boleto) {
         mostrarModalBoleto(result.boleto);
       }
+    } else {
+      mostrarMensaje(result.mensaje || 'Error al registrar boleto', 'error');
+      await cargarCartelera();
+      generarMapaAsientos();
     }
   } catch (err) {
     console.error('Error al guardar boleto:', err);
@@ -955,29 +1312,90 @@ function obtenerImagenPorNombreCombo(nombreCombo) {
 
 async function cargarDulceria() {
   try {
-    const res = await fetch('/api/dulceria');
+    let url = '/api/dulceria';
+    if (!esOperador()) {
+      const folios = cargarFoliosLocales('cine_mis_dulceria');
+      url = `/api/dulceria?folios=${encodeURIComponent(folios.join(','))}`;
+    }
+    const res = await apiFetch(url);
     const data = await res.json();
     const tbody = document.getElementById('tabla-dulceria-body');
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    (data.ordenes || []).forEach(o => {
+    const ordenes = data.ordenes || [];
+    if (!ordenes.length) {
+      const cols = esOperador() ? 8 : 7;
+      const msg = esOperador()
+        ? 'No hay pedidos de dulcería registrados.'
+        : 'Aún no envías pedidos de dulcería en esta sesión.';
+      tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:#94a3b8;">${msg}</td></tr>`;
+      return;
+    }
+
+    ordenes.forEach(o => {
       const imgUrl = o.imagen || obtenerImagenPorNombreCombo(o.combo || '');
-      const pillClass = (o.estado || '').toLowerCase().includes('list') ? 'ready' : 'prep';
+      const est = (o.estado || '').toLowerCase();
+      const pillClass = (est.includes('list') || est.includes('entreg')) ? 'ready' : 'prep';
+      const accionesHtml = esOperador()
+        ? `<td>
+            <div class="acciones-celda">
+              <button type="button" class="btn-tabla-ok" onclick="avanzarEstadoDulceria('${esc(o.folio)}')">Estado</button>
+              <button type="button" class="btn-tabla-danger" onclick="eliminarOrdenDulceria('${esc(o.folio)}')">Eliminar</button>
+            </div>
+          </td>`
+        : '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong class="gold-text">${o.folio}</strong></td>
+        <td><strong class="gold-text">${esc(o.folio)}</strong></td>
         <td><img src="${imgUrl}" alt="Combo" class="table-thumb" loading="lazy"></td>
-        <td>${o.cliente}</td>
-        <td>${o.combo}</td>
+        <td>${esc(o.cliente)}</td>
+        <td>${esc(o.combo)}</td>
         <td><strong>${o.cantidad}</strong></td>
         <td><strong>$${Number(o.total).toFixed(2)}</strong></td>
-        <td><span class="status-pill ${pillClass}">${o.estado}</span></td>
+        <td><span class="status-pill ${pillClass}">${esc(o.estado)}</span></td>
+        ${accionesHtml}
       `;
       tbody.appendChild(tr);
     });
   } catch (err) {
     console.error('Error al cargar dulcería:', err);
+  }
+}
+
+async function avanzarEstadoDulceria(folio) {
+  try {
+    const res = await apiFetch(`/api/dulceria/${encodeURIComponent(folio)}/estado`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const result = await res.json();
+    if (res.ok) {
+      mostrarMensaje(result.mensaje, 'exito');
+      cargarDulceria();
+      if (esGerente()) cargarDashboard();
+    } else {
+      mostrarMensaje(result.mensaje || 'Sin permiso para actualizar pedido.', 'error');
+    }
+  } catch (err) {
+    console.error('Error al actualizar orden:', err);
+  }
+}
+
+async function eliminarOrdenDulceria(folio) {
+  try {
+    const res = await apiFetch(`/api/dulceria/${encodeURIComponent(folio)}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (res.ok) {
+      mostrarMensaje(result.mensaje, 'exito');
+      cargarDulceria();
+      if (esGerente()) cargarDashboard();
+    } else {
+      mostrarMensaje(result.mensaje || 'Sin permiso para eliminar pedido.', 'error');
+    }
+  } catch (err) {
+    console.error('Error al eliminar orden:', err);
   }
 }
 
@@ -992,16 +1410,22 @@ async function ordenarDulceria(e) {
   const precio_unitario = opt ? Number(opt.dataset.precio) : 185.0;
 
   try {
-    const res = await fetch('/api/dulceria/ordenar', {
+    const res = await apiFetch('/api/dulceria/ordenar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cliente, combo, cantidad, imagen, precio_unitario })
     });
     const result = await res.json();
     if (res.ok) {
+      if (result.orden && result.orden.folio) {
+        guardarFolioLocal('cine_mis_dulceria', result.orden.folio);
+      }
       mostrarMensaje(result.mensaje, 'exito');
       document.getElementById('dulceria-cliente').value = '';
       cargarDulceria();
+      if (esGerente()) cargarDashboard();
+    } else {
+      mostrarMensaje(result.mensaje || 'Error al enviar pedido', 'error');
     }
   } catch (err) {
     console.error('Error al enviar pedido:', err);
@@ -1071,29 +1495,89 @@ function obtenerImagenIncidenciaLocal(item) {
 
 async function cargarIncidencias() {
   try {
-    const res = await fetch('/api/incidencias');
+    let url = '/api/incidencias';
+    if (!esOperador()) {
+      const folios = cargarFoliosLocales('cine_mis_incidencias');
+      url = `/api/incidencias?folios=${encodeURIComponent(folios.join(','))}`;
+    }
+    const res = await apiFetch(url);
     const data = await res.json();
     const tbody = document.getElementById('tabla-incidencias-body');
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    (data.incidencias || []).forEach(i => {
+    const incidencias = data.incidencias || [];
+    if (!incidencias.length) {
+      const cols = esOperador() ? 7 : 6;
+      const msg = esOperador()
+        ? 'No hay incidencias registradas.'
+        : 'Aún no has enviado reportes de sala en esta sesión.';
+      tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:#94a3b8;">${msg}</td></tr>`;
+      return;
+    }
+
+    incidencias.forEach(i => {
       const imgUrl = obtenerImagenIncidenciaLocal(i);
-      const esResuelto = i.estado === 'Resuelto';
-      const pillClass = esResuelto ? 'ready' : 'pending';
+      const est = (i.estado || '').toLowerCase();
+      const pillClass = est === 'resuelto' ? 'ready' : (est === 'en proceso' ? 'prep' : 'pending');
+      const accionesHtml = esOperador()
+        ? `<td>
+            <div class="acciones-celda">
+              <button type="button" class="btn-tabla-ok" onclick="avanzarEstadoIncidencia('${esc(i.id)}')">Estado</button>
+              <button type="button" class="btn-tabla-danger" onclick="eliminarIncidencia('${esc(i.id)}')">Eliminar</button>
+            </div>
+          </td>`
+        : '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong class="gold-text">${i.id}</strong></td>
+        <td><strong class="gold-text">${esc(i.id)}</strong></td>
         <td><img src="${imgUrl}" alt="Incidencia" class="table-thumb" loading="lazy"></td>
-        <td><strong>${i.sala}</strong></td>
-        <td>${i.problema}</td>
-        <td><span class="badge-outline">${i.prioridad}</span></td>
-        <td><span class="status-pill ${pillClass}">${i.estado}</span></td>
+        <td><strong>${esc(i.sala)}</strong></td>
+        <td>${esc(i.problema)}</td>
+        <td><span class="badge-outline">${esc(i.prioridad)}</span></td>
+        <td><span class="status-pill ${pillClass}">${esc(i.estado)}</span></td>
+        ${accionesHtml}
       `;
       tbody.appendChild(tr);
     });
   } catch (err) {
     console.error('Error al cargar incidencias:', err);
+  }
+}
+
+async function avanzarEstadoIncidencia(folio) {
+  try {
+    const res = await apiFetch(`/api/incidencias/${encodeURIComponent(folio)}/estado`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const result = await res.json();
+    if (res.ok) {
+      mostrarMensaje(result.mensaje, 'exito');
+      cargarIncidencias();
+      if (esGerente()) cargarDashboard();
+    } else {
+      mostrarMensaje(result.mensaje || 'Sin permiso para actualizar incidencia.', 'error');
+    }
+  } catch (err) {
+    console.error('Error al actualizar incidencia:', err);
+  }
+}
+
+async function eliminarIncidencia(folio) {
+  try {
+    const res = await apiFetch(`/api/incidencias/${encodeURIComponent(folio)}`, { method: 'DELETE' });
+    const result = await res.json();
+    if (res.ok) {
+      mostrarMensaje(result.mensaje, 'exito');
+      cargarIncidencias();
+      if (esGerente()) cargarDashboard();
+    } else {
+      mostrarMensaje(result.mensaje || 'Sin permiso para eliminar incidencia.', 'error');
+    }
+  } catch (err) {
+    console.error('Error al eliminar incidencia:', err);
   }
 }
 
@@ -1106,18 +1590,148 @@ async function reportarIncidencia(e) {
   const imagen = document.getElementById('inc-imagen').value || CATALOGO_INCIDENCIAS[0].imagen;
 
   try {
-    const res = await fetch('/api/incidencias/reportar', {
+    const res = await apiFetch('/api/incidencias/reportar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sala, prioridad, problema, categoria, imagen })
     });
     const result = await res.json();
     if (res.ok) {
+      if (result.incidencia && result.incidencia.id) {
+        guardarFolioLocal('cine_mis_incidencias', result.incidencia.id);
+      }
       mostrarMensaje(result.mensaje, 'exito');
       document.getElementById('inc-problema').value = '';
       cargarIncidencias();
+      if (esGerente()) cargarDashboard();
+    } else {
+      mostrarMensaje(result.mensaje || 'Error al registrar incidencia', 'error');
     }
   } catch (err) {
     console.error('Error al reportar:', err);
+  }
+}
+
+// =========================================================================
+// MÓDULO 4: PANEL GERENCIAL (MIS / DSS) Y MONITOR SQLITE EN VIVO
+// =========================================================================
+async function cargarDashboard() {
+  if (!esGerente()) return;
+  try {
+    const res = await apiFetch('/api/dashboard');
+    if (!res.ok) return;
+    const data = await res.json();
+    const kpis = data.kpis || {};
+
+    const pillHeader = document.getElementById('db-live-indicator');
+    if (pillHeader) {
+      pillHeader.textContent = `● ${data.motor || 'SQLite 3'} · ${(data.conteo_tablas || []).length} Tablas`;
+    }
+
+    const elTot = document.getElementById('kpi-ingresos-totales');
+    const elDesg = document.getElementById('kpi-ingresos-desglose');
+    const elBol = document.getElementById('kpi-boletos-vendidos');
+    const elBut = document.getElementById('kpi-butacas-sub');
+    const elOrd = document.getElementById('kpi-ordenes-dulceria');
+    const elInc = document.getElementById('kpi-incidencias-estado');
+    const elIncRes = document.getElementById('kpi-incidencias-resueltas');
+
+    if (elTot) elTot.textContent = `$${Number(kpis.ingresos_totales || 0).toFixed(2)} MXN`;
+    if (elDesg) elDesg.textContent = `Taquilla: $${Number(kpis.ingresos_taquilla || 0).toFixed(2)} · Dulcería: $${Number(kpis.ingresos_dulceria || 0).toFixed(2)}`;
+    if (elBol) elBol.textContent = `${kpis.boletos_activos || 0} boletos`;
+    if (elBut) elBut.textContent = `${kpis.butacas_vendidas || 0} asientos pagados en SQLite`;
+    if (elOrd) elOrd.textContent = `${kpis.ordenes_activas || 0} órdenes`;
+    if (elInc) elInc.textContent = `${kpis.incidencias_pendientes || 0} pendientes`;
+    if (elIncRes) elIncRes.textContent = `${kpis.incidencias_resueltas || 0} resueltas en bitácora`;
+
+    const elRuta = document.getElementById('bd-archivo-ruta');
+    const elMotor = document.getElementById('motor-bd-badge');
+    const elInt = document.getElementById('integridad-bd-badge');
+    if (elRuta) elRuta.textContent = `Archivo: ${data.archivo || 'database/cine_regina.db'}`;
+    if (elMotor) elMotor.textContent = data.motor || 'SQLite 3';
+    if (elInt) elInt.textContent = `PRAGMA FK: ${data.foreign_keys ? 'ON' : 'OFF'} · Integridad: ${data.integridad || 'ok'}`;
+
+    const gridTablas = document.getElementById('grid-conteo-tablas');
+    if (gridTablas) {
+      gridTablas.innerHTML = (data.conteo_tablas || []).map(t => `
+        <div class="tabla-bd-badge">
+          <code>${esc(t.tabla)}</code>
+          <strong>${t.registros}</strong>
+        </div>
+      `).join('');
+    }
+
+    const tbodyOcup = document.getElementById('tabla-ocupacion-body');
+    if (tbodyOcup) {
+      tbodyOcup.innerHTML = (data.ocupacion_funciones || []).map(f => {
+        const pct = Number(f.porcentaje_ocupacion || 0);
+        let dssLabel = 'Operación normal';
+        let dssClass = 'prep';
+        if (pct < 15) {
+          dssLabel = 'Lanzar promo 2x1';
+          dssClass = 'pending';
+        } else if (pct >= 50) {
+          dssLabel = 'Alta demanda';
+          dssClass = 'ready';
+        }
+        return `
+          <tr>
+            <td><strong>${esc(f.pelicula)}</strong></td>
+            <td>${esc(f.sala)}</td>
+            <td>${esc(f.fecha)} · ${esc(f.hora)}</td>
+            <td><strong>${f.asientos_vendidos}</strong> / ${f.aforo}</td>
+            <td>
+              <span>${pct}%</span>
+              <div class="ocupacion-bar-wrap">
+                <div class="ocupacion-bar-fill" style="width:${Math.min(100, pct)}%"></div>
+              </div>
+            </td>
+            <td><span class="status-pill ${dssClass}">${dssLabel}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    renderizarTablaInsumos(data.insumos || []);
+  } catch (err) {
+    console.error('Error al cargar panel gerencial:', err);
+  }
+}
+
+function renderizarTablaInsumos(insumos) {
+  const tbody = document.getElementById('tabla-insumos-body');
+  if (!tbody) return;
+  tbody.innerHTML = insumos.map(ins => {
+    const bajo = Number(ins.stock_actual) <= Number(ins.stock_minimo);
+    return `
+      <tr>
+        <td><strong>${esc(ins.nombre)}</strong></td>
+        <td><strong>${Number(ins.stock_actual).toFixed(2)}</strong> ${esc(ins.unidad)}</td>
+        <td>${Number(ins.stock_minimo).toFixed(2)} ${esc(ins.unidad)}</td>
+        <td><span class="status-pill ${bajo ? 'pending' : 'ready'}">${bajo ? 'Resurtir' : 'Stock OK'}</span></td>
+        <td>
+          <button type="button" class="btn-tabla-ok" onclick="resurtirInsumo(${ins.id_insumo})">+ Resurtir (+20)</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function resurtirInsumo(idInsumo) {
+  try {
+    const res = await apiFetch('/api/insumos/resurtir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_insumo: idInsumo, cantidad: 20 })
+    });
+    const result = await res.json();
+    if (res.ok) {
+      mostrarMensaje(result.mensaje, 'exito');
+      renderizarTablaInsumos(result.insumos || []);
+    } else {
+      mostrarMensaje(result.mensaje || 'Solo el Gerente puede resurtir inventario.', 'error');
+    }
+  } catch (err) {
+    console.error('Error al resurtir insumo:', err);
   }
 }

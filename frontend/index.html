@@ -19,17 +19,29 @@
         </div>
       </div>
 
-      <nav class="nav">
-        <button class="nav-btn active" onclick="verModulo('taquilla')">
-          Cartelera y Taquilla
-        </button>
-        <button class="nav-btn" onclick="verModulo('dulceria')">
-          Dulcería Express
-        </button>
-        <button class="nav-btn" onclick="verModulo('incidencias')">
-          Reporte de Sala
-        </button>
-      </nav>
+      <div class="header-right-group">
+        <div class="header-user-bar">
+          <span class="role-badge-pill role-cliente" id="role-badge-pill">Cliente</span>
+          <span class="db-status-pill hidden" id="db-live-indicator">SQLite 3 · 14 Tablas</span>
+          <button type="button" class="btn-acceso-perfil" id="btn-abrir-acceso" onclick="abrirModalAcceso()">
+            Cambiar Perfil / Acceso
+          </button>
+        </div>
+        <nav class="nav">
+          <button class="nav-btn active" id="nav-btn-taquilla" onclick="verModulo('taquilla')">
+            Cartelera y Taquilla
+          </button>
+          <button class="nav-btn" id="nav-btn-dulceria" onclick="verModulo('dulceria')">
+            Dulcería Express
+          </button>
+          <button class="nav-btn" id="nav-btn-incidencias" onclick="verModulo('incidencias')">
+            Reportar Falla
+          </button>
+          <button class="nav-btn hidden" id="nav-btn-bd" onclick="verModulo('bd')">
+            Panel Gerencial y BD
+          </button>
+        </nav>
+      </div>
     </div>
   </header>
 
@@ -103,6 +115,38 @@
         <!-- Grid de pósters con múltiples horarios por día -->
         <div id="cartelera-grid" class="cartelera-grid">
           <!-- Se llena dinámicamente desde app.js -->
+        </div>
+
+        <!-- Historial de Boletos Emitidos en Taquilla (CRUD: Consultar y Cancelar en SQLite) -->
+        <div class="caja-tabla bloque-historial">
+          <div class="form-header-bar historial-header-bar">
+            <div>
+              <h3 id="titulo-historial-boletos">Mis Boletos Reservados</h3>
+              <span class="badge-subtle" id="subtitulo-historial-boletos">Tus compras de esta sesión o consulta directa por folio (ej. CR-TK-101)</span>
+            </div>
+            <div class="buscador-tabla-wrap">
+              <input type="search" id="buscar-boleto-input" class="input-busqueda-tabla" placeholder="Buscar por folio, cliente o película..." oninput="filtrarTablaBoletos()">
+            </div>
+          </div>
+          <div class="tabla-scroll">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Folio</th>
+                  <th>Cliente</th>
+                  <th>Película</th>
+                  <th>Función</th>
+                  <th>Sala</th>
+                  <th>Asientos</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-boletos-body">
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -261,8 +305,8 @@
 
         <div class="caja-tabla">
           <div class="form-header-bar">
-            <h3>Pedidos Activos en Dulcería</h3>
-            <span class="badge-subtle">Servicio a Sala VIP y Mostrador</span>
+            <h3 id="titulo-tabla-dulceria">Mis Pedidos de Dulcería</h3>
+            <span class="badge-subtle" id="subtitulo-tabla-dulceria">Seguimiento en vivo de tu orden</span>
           </div>
           <div class="tabla-scroll">
             <table class="tabla">
@@ -275,6 +319,7 @@
                   <th>Cant.</th>
                   <th>Total</th>
                   <th>Estado</th>
+                  <th id="th-dulceria-acciones" class="hidden">Acciones</th>
                 </tr>
               </thead>
               <tbody id="tabla-dulceria-body">
@@ -356,8 +401,8 @@
 
         <div class="caja-tabla">
           <div class="form-header-bar">
-            <h3>Bitácora de Reportes de Sala</h3>
-            <span class="badge-subtle">Monitoreo de las 6 Salas Regina VIP</span>
+            <h3 id="titulo-tabla-incidencias">Mis Reportes Enviados</h3>
+            <span class="badge-subtle" id="subtitulo-tabla-incidencias">Aviso directo al equipo de mantenimiento</span>
           </div>
           <div class="tabla-scroll">
             <table class="tabla">
@@ -369,9 +414,122 @@
                   <th>Descripción</th>
                   <th>Prioridad</th>
                   <th>Estado</th>
+                  <th id="th-incidencias-acciones" class="hidden">Acciones</th>
                 </tr>
               </thead>
               <tbody id="tabla-incidencias-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- MÓDULO 4: PANEL GERENCIAL, TOMA DE DECISIONES Y MONITOR SQLITE      -->
+    <!-- =================================================================== -->
+    <section id="modulo-bd" class="modulo hidden">
+      <div class="section-header">
+        <div>
+          <span class="eyebrow">SISTEMA DE INFORMACIÓN GERENCIAL (MIS / DSS) · BASE DE DATOS SQLITE</span>
+          <h2>Panel Gerencial y Base de Datos Relacional en Vivo</h2>
+          <p class="desc">Consulta los indicadores financieros, el estado de las 14 tablas en SQLite, la vista analítica de ocupación y el inventario de bodega.</p>
+        </div>
+        <button type="button" class="btn-cinemark btn-sm" onclick="cargarDashboard()">
+          ↻ Actualizar Monitor SQLite
+        </button>
+      </div>
+
+      <!-- 4 Tarjetas KPI Ejecutivas -->
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span class="kpi-label">INGRESOS TOTALES</span>
+          <strong class="kpi-value gold-text" id="kpi-ingresos-totales">$0.00</strong>
+          <span class="kpi-sub" id="kpi-ingresos-desglose">Taquilla: $0.00 · Dulcería: $0.00</span>
+        </article>
+        <article class="kpi-card">
+          <span class="kpi-label">BOLETOS Y BUTACAS VENDIDAS</span>
+          <strong class="kpi-value" id="kpi-boletos-vendidos">0 boletos</strong>
+          <span class="kpi-sub" id="kpi-butacas-sub">0 asientos pagados en SQLite</span>
+        </article>
+        <article class="kpi-card">
+          <span class="kpi-label">COMANDAS DE DULCERÍA</span>
+          <strong class="kpi-value" id="kpi-ordenes-dulceria">0 órdenes</strong>
+          <span class="kpi-sub">Descuento automático de insumos por receta</span>
+        </article>
+        <article class="kpi-card">
+          <span class="kpi-label">ESTADO TÉCNICO DE SALAS</span>
+          <strong class="kpi-value" id="kpi-incidencias-estado">0 pendientes</strong>
+          <span class="kpi-sub" id="kpi-incidencias-resueltas">0 resueltas en bitácora</span>
+        </article>
+      </div>
+
+      <!-- Monitor de Motor SQLite y Conteo de las 14 Tablas -->
+      <div class="caja-tabla bd-monitor-box">
+        <div class="form-header-bar historial-header-bar">
+          <div>
+            <h3>Estado del Motor SQLite y Conteo de las 14 Tablas</h3>
+            <span class="badge-subtle" id="bd-archivo-ruta">Archivo: database/cine_regina.db</span>
+          </div>
+          <div class="bd-badges-row">
+            <span class="badge-gold" id="motor-bd-badge">SQLite 3</span>
+            <span class="status-pill ready" id="integridad-bd-badge">PRAGMA FK: ON · Integridad: ok</span>
+          </div>
+        </div>
+        <div id="grid-conteo-tablas" class="tablas-bd-grid">
+          <!-- Se llena dinámicamente desde app.js -->
+        </div>
+      </div>
+
+      <!-- Tablas Gerenciales (MIS / DSS) -->
+      <div class="panel-grid-bi">
+        <div class="caja-tabla">
+          <div class="form-header-bar">
+            <div>
+              <h3>Vista Analítica: vista_ocupacion_funciones</h3>
+              <span class="badge-subtle">Apoyo a decisiones de cartelera y promociones</span>
+            </div>
+          </div>
+          <div class="tabla-scroll">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Película</th>
+                  <th>Sala</th>
+                  <th>Fecha / Hora</th>
+                  <th>Vendidos</th>
+                  <th>Ocupación</th>
+                  <th>Recomendación DSS</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-ocupacion-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="caja-tabla">
+          <div class="form-header-bar historial-header-bar">
+            <div>
+              <h3>Inventario de Bodega (insumos)</h3>
+              <span class="badge-subtle">Actualización en vivo vía producto_insumo</span>
+            </div>
+            <button type="button" class="btn-tabla-ok" onclick="resurtirInsumo('all')">
+              + Resurtir Todos (+20)
+            </button>
+          </div>
+          <div class="tabla-scroll">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Insumo</th>
+                  <th>Stock Actual</th>
+                  <th>Mínimo</th>
+                  <th>Estado</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-insumos-body">
               </tbody>
             </table>
           </div>
@@ -442,6 +600,73 @@
         <div class="ticket-barcode">||| |||| || ||||| |||| ||| |||| || |||</div>
       </div>
       <button type="button" class="btn-guardar" onclick="cerrarModalBoleto()">Cerrar Comprobante</button>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL DE SELECCIÓN DE PERFIL Y ACCESO POR ROLES (CLIENTE / STAFF / GERENTE) -->
+  <!-- ===================================================================== -->
+  <div id="modal-acceso" class="modal-backdrop hidden" onclick="cerrarModalAccesoSiFondo(event)">
+    <div class="modal-card modal-acceso-card">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">CONTROL DE ACCESO POR ROLES · CINE REGINA</span>
+          <h3>¿Cómo deseas ingresar al sistema?</h3>
+        </div>
+        <button type="button" class="btn-cerrar-modal" onclick="cerrarModalAcceso()">✕ Cerrar</button>
+      </div>
+
+      <div class="acceso-grid">
+        <div class="acceso-opcion-card">
+          <span class="badge-gold">PÚBLICO GENERAL</span>
+          <h4>Entrar como Cliente</h4>
+          <p>Consulta cartelera VIP, mira tráilers en YouTube, elige tus butacas, ordena en dulcería y reporta cualquier falla en tu sala.</p>
+          <ul class="acceso-lista">
+            <li>Sin contraseña ni registro obligatorio</li>
+            <li>Solo ves tus propias compras y pedidos</li>
+            <li>Herramientas internas ocultas</li>
+          </ul>
+          <button type="button" class="btn-guardar" onclick="entrarComoCliente()">
+            Continuar como Cliente
+          </button>
+        </div>
+
+        <div class="acceso-opcion-card acceso-staff-card">
+          <span class="badge-red">PERSONAL Y GERENCIA</span>
+          <h4>Iniciar Sesión de Trabajo</h4>
+          <p>Acceso protegido con usuario y contraseña validados contra la tabla <code>usuarios</code> en SQLite.</p>
+
+          <form id="form-login">
+            <div class="campo">
+              <label for="login-username">Usuario:</label>
+              <input type="text" id="login-username" placeholder="gerente o staff" required>
+            </div>
+            <div class="campo">
+              <label for="login-password">Contraseña:</label>
+              <input type="password" id="login-password" placeholder="••••••••" required>
+            </div>
+            <div id="login-error-box" class="login-error hidden"></div>
+            <button type="submit" class="btn-guardar">Entrar al Sistema</button>
+          </form>
+
+          <div class="demo-creds-box">
+            <span class="demo-creds-label">Cuentas de prueba rápida:</span>
+            <div class="demo-creds-btns">
+              <button type="button" class="btn-tabla-accion" onclick="rellenarDemoLogin('staff', 'staff2026')">
+                Staff (staff / staff2026)
+              </button>
+              <button type="button" class="btn-tabla-ok" onclick="rellenarDemoLogin('gerente', 'regina2026')">
+                Gerente (gerente / regina2026)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="sesion-activa-footer" class="modal-footer-bar hidden">
+        <span id="sesion-activa-texto">Sesión iniciada</span>
+        <button type="button" class="btn-tabla-danger" onclick="cerrarSesion()">Cerrar Sesión</button>
+      </div>
     </div>
   </div>
 

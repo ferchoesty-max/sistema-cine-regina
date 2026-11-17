@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS boletos;
 DROP TABLE IF EXISTS orden_detalle;
 DROP TABLE IF EXISTS ordenes_dulceria;
 DROP TABLE IF EXISTS incidencias;
+DROP TABLE IF EXISTS usuarios;
 DROP TABLE IF EXISTS funciones;
 DROP TABLE IF EXISTS asientos;
 DROP TABLE IF EXISTS producto_insumo;
@@ -216,7 +217,7 @@ CREATE TABLE ordenes_dulceria (
     folio            TEXT    NOT NULL UNIQUE,
     id_cliente       INTEGER,
     estado           TEXT    NOT NULL DEFAULT 'En preparación'
-                     CHECK (estado IN ('En preparación', 'Lista', 'Entregada', 'Cancelada')),
+                     CHECK (estado IN ('En preparación', 'Lista', 'Listo para entrega', 'Entregada', 'Cancelada')),
     hora_recoleccion TEXT,
     total            REAL    NOT NULL DEFAULT 0 CHECK (total >= 0),
     creada_en        TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -250,7 +251,7 @@ CREATE TABLE incidencias (
     id_sala        INTEGER NOT NULL,
     id_funcion     INTEGER,
     categoria      TEXT    NOT NULL
-                   CHECK (categoria IN ('Proyección', 'Audio', 'Clima', 'Butaca', 'Iluminación', 'Otro')),
+                   CHECK (categoria IN ('Proyección', 'Audio', 'Clima', 'Butaca', 'Butacas', 'Limpieza', 'Iluminación', 'Servicio', 'Accesos', 'Otro')),
     descripcion    TEXT    NOT NULL CHECK (length(trim(descripcion)) > 0),
     prioridad      TEXT    NOT NULL DEFAULT 'Media'
                    CHECK (prioridad IN ('Baja', 'Media', 'Alta', 'Urgente')),
@@ -264,6 +265,20 @@ CREATE TABLE incidencias (
     FOREIGN KEY (id_funcion) REFERENCES funciones (id_funcion)
         ON UPDATE CASCADE ON DELETE SET NULL,
     CHECK (resuelta_en IS NULL OR resuelta_en >= reportada_en)
+);
+
+-- ----------------------------------------------------------------------------
+-- 14. usuarios (control de acceso por roles: cliente, staff, gerente)
+-- ----------------------------------------------------------------------------
+CREATE TABLE usuarios (
+    id_usuario    INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT    NOT NULL UNIQUE CHECK (length(trim(username)) > 0),
+    password_hash TEXT    NOT NULL CHECK (length(password_hash) = 64),
+    nombre        TEXT    NOT NULL CHECK (length(trim(nombre)) > 0),
+    rol           TEXT    NOT NULL DEFAULT 'cliente'
+                  CHECK (rol IN ('cliente', 'staff', 'gerente')),
+    activo        INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
+    creado_en     TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 -- ----------------------------------------------------------------------------

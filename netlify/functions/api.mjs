@@ -1,3 +1,64 @@
+import crypto from 'node:crypto';
+
+const AUTH_SECRET = process.env.CINE_SECRET || 'cine-regina-dicis-2026';
+
+const USUARIOS_DEMO = [
+  {
+    username: 'gerente',
+    passwordHash: 'e94d810933f7ea8151d5c1a85ec5a9d6c4390bbb00c36991313b60b0deb9d6df',
+    nombre: 'Fernando Tolentino (Gerente)',
+    rol: 'gerente'
+  },
+  {
+    username: 'staff',
+    passwordHash: '49cf21a443a3bcd6ea37f94a1896db8fc62056808025a6d4ed450888cf2039ab',
+    nombre: 'Carlos Ramírez (Staff)',
+    rol: 'staff'
+  },
+  {
+    username: 'cliente',
+    passwordHash: '19d701a184ebe5a0f9721d8acd219444932ddf2b8b8b85802e97b93c2c4c98d1',
+    nombre: 'Luis Mendoza (Cliente VIP)',
+    rol: 'cliente'
+  }
+];
+
+function hashPassword(pwd) {
+  return crypto.createHash('sha256').update(`regina:${pwd}`).digest('hex');
+}
+
+function firmarToken(usuario) {
+  const b64 = Buffer.from(JSON.stringify(usuario), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(b64).digest('hex');
+  return `${b64}.${sig}`;
+}
+
+function verificarToken(token) {
+  if (!token || !token.includes('.')) return null;
+  const idx = token.lastIndexOf('.');
+  const b64 = token.slice(0, idx);
+  const sig = token.slice(idx + 1);
+  const esperado = crypto.createHmac('sha256', AUTH_SECRET).update(b64).digest('hex');
+  if (sig.length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(esperado))) {
+    return null;
+  }
+  try {
+    const data = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
+    if (['cliente', 'staff', 'gerente'].includes(data.rol)) return data;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function usuarioActual(req) {
+  const auth = req.headers.get('authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (req.headers.get('x-cine-token') || '').trim();
+  const u = verificarToken(token);
+  if (u) return { usuario: u, autenticado: true };
+  return { usuario: { username: 'visitante', nombre: 'Cliente Visitante', rol: 'cliente' }, autenticado: false };
+}
+
 const IMAGENES_DULCERIA = {
   Pareja: "https://images.unsplash.com/photo-1585647347483-22b66260dfff?auto=format&fit=crop&w=500&q=80",
   VIP: "https://images.unsplash.com/photo-1578849278619-e73505e9610f?auto=format&fit=crop&w=500&q=80",
@@ -48,7 +109,7 @@ const PELICULAS_BASE = [
     trailer_id: "IzynsBv2Dnw",
     sinopsis: "Leo San Juan y su equipo se enfrentan nuevamente al temible Charro Negro en una oscura batalla por las almas atrapadas en el inframundo.",
     horarios_base: ["14:30", "17:00", "19:30", "22:00"],
-    asientos_semilla: ["B3", "B4", "C4", "C5"]
+    asientos_semilla: ["B3", "B4"]
   },
   {
     id: 2,
@@ -180,9 +241,14 @@ function construirCatalogoInicial() {
       const fechaStr = fObj.fecha;
       p.horarios_base.forEach((horaStr, idxH) => {
         const fid = `F-${p.id}-${fechaStr.replace(/-/g, '')}-${horaStr.replace(/:/g, '')}`;
-        const ocupados = idxH === 0
-          ? [...p.asientos_semilla]
-          : [...patronesExtra[(p.id + idxF + idxH) % patronesExtra.length]];
+        let ocupados;
+        if (idxH === 0) {
+          ocupados = [...p.asientos_semilla];
+        } else if (p.id === 2 && fechaStr === "2026-11-04" && horaStr === "18:00") {
+          ocupados = ["D1", "D2"];
+        } else {
+          ocupados = [...patronesExtra[(p.id + idxF + idxH) % patronesExtra.length]];
+        }
         asientosPorFuncion[fid] = ocupados;
         funcionesPeli.push({
           id_funcion: fid,
@@ -218,6 +284,8 @@ function construirCatalogoInicial() {
 }
 
 const initData = construirCatalogoInicial();
+initData.asientosPorFuncion["F-1-20261104-1430"] = ["B3", "B4", "C4", "C5"];
+initData.asientosPorFuncion["F-2-20261104-1800"] = ["B6", "B7", "D1", "D2"];
 
 const db = {
   fechas: FECHAS_CARRETE,
@@ -228,66 +296,81 @@ const db = {
       folio: "CR-TK-101",
       cliente: "Luis Mendoza",
       pelicula: "La Venganza del Charro Negro",
+      funcion_id: "F-1-20261104-1430",
       fecha: "2026-11-04",
       horario: "14:30",
       sala: "Sala 1 Regina VIP",
       cantidad: 2,
       asientos: "C4, C5",
       total: 290.0,
+      estado: "Pagado",
       hora: "13:50"
     },
     {
       folio: "CR-TK-102",
       cliente: "Valeria Sánchez",
       pelicula: "Clayface",
+      funcion_id: "F-2-20261104-1800",
       fecha: "2026-11-04",
       horario: "18:00",
       sala: "Sala 2 Regina VIP",
       cantidad: 2,
       asientos: "B6, B7",
       total: 290.0,
+      estado: "Pagado",
       hora: "16:15"
     }
   ],
   dulceria: [
     {
-      folio: "CR-DL-201",
-      cliente: "Sofía Martínez",
-      combo: "Combo Pareja (Palomitas + 2 Refrescos)",
+      folio: "CR-DL-1001",
+      cliente: "Valeria Sánchez",
+      combo: "Combo Pareja Clásico (Palomitas Grandes + 2 Refrescos)",
       cantidad: 1,
       total: 185.0,
-      estado: "En preparación",
+      estado: "Lista",
       imagen: IMAGENES_DULCERIA.Pareja
     },
     {
-      folio: "CR-DL-202",
-      cliente: "Diego Hernández",
-      combo: "Combo Regina VIP (Palomitas Caramelo + Nachos + 2 Refrescos)",
-      cantidad: 1,
-      total: 240.0,
-      estado: "Listo para entrega",
-      imagen: IMAGENES_DULCERIA.VIP
+      folio: "CR-DL-1002",
+      cliente: "Cliente Mostrador",
+      combo: "Refresco Grande de Máquina (940 ml), Palomitas Medianas Saladas",
+      cantidad: 2,
+      total: 135.0,
+      estado: "En preparación",
+      imagen: IMAGENES_DULCERIA.Refresco
     }
   ],
   incidencias: [
     {
-      id: "INC-01",
+      id: "CR-INC-501",
+      folio: "CR-INC-501",
       sala: "Sala 3 Regina VIP",
       categoria: "Clima",
-      problema: "Aire acondicionado muy frío en filas D y E",
+      problema: "El aire acondicionado está congelando la fila D y E, temperatura muy baja.",
       prioridad: "Alta",
       estado: "Resuelto",
       imagen: IMAGENES_INCIDENCIAS.Clima
     },
     {
-      id: "INC-02",
+      id: "CR-INC-502",
+      folio: "CR-INC-502",
       sala: "Sala 1 Regina VIP",
       categoria: "Audio",
-      problema: "Bocina lateral izquierda vibra en frecuencias graves",
+      problema: "La bocina lateral izquierda trasera vibra en los sonidos graves.",
       prioridad: "Media",
       estado: "Pendiente",
       imagen: IMAGENES_INCIDENCIAS.Audio
     }
+  ],
+  insumos: [
+    { id_insumo: 1, nombre: "Maíz palomero premium", unidad: "kg", stock_actual: 48.5, stock_minimo: 15.0 },
+    { id_insumo: 2, nombre: "Jarabes concentrados", unidad: "litros", stock_actual: 120.0, stock_minimo: 30.0 },
+    { id_insumo: 3, nombre: "Vasos y contenedores", unidad: "piezas", stock_actual: 310.0, stock_minimo: 50.0 },
+    { id_insumo: 4, nombre: "Queso cheddar caliente", unidad: "litros", stock_actual: 14.5, stock_minimo: 5.0 },
+    { id_insumo: 5, nombre: "Totopos de maíz", unidad: "bolsas", stock_actual: 38.0, stock_minimo: 10.0 },
+    { id_insumo: 6, nombre: "Pan artesanal", unidad: "piezas", stock_actual: 35.0, stock_minimo: 10.0 },
+    { id_insumo: 7, nombre: "Salchichas de res", unidad: "piezas", stock_actual: 60.0, stock_minimo: 15.0 }
   ]
 };
 
@@ -327,10 +410,64 @@ function obtenerImagenIncidencia(categoria, problema) {
   return IMAGENES_INCIDENCIAS.Proyección;
 }
 
+function descontarInsumosDemo(combo, cantidad) {
+  const c = combo.toLowerCase();
+  const restar = (id, cant) => {
+    const ins = db.insumos.find(i => i.id_insumo === id);
+    if (ins) ins.stock_actual = Math.max(0, Math.round((ins.stock_actual - cant * cantidad) * 100) / 100);
+  };
+  if (c.includes('pareja') || c.includes('vip') || c.includes('familiar') || c.includes('individual')) {
+    restar(1, 0.4);
+    restar(2, 1.2);
+    restar(3, 2);
+  } else if (c.includes('nachos')) {
+    restar(4, 0.35);
+    restar(5, 1);
+  } else if (c.includes('hot dog')) {
+    restar(6, 1);
+    restar(7, 1);
+  } else {
+    restar(3, 1);
+  }
+}
+
 export default async (req, context) => {
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/\.netlify\/functions\/api\/?/, '').replace(/^\/api\/?/, '');
+  const path = decodeURIComponent(url.pathname)
+    .replace(/^\/\.netlify\/functions\/api\/?/, '')
+    .replace(/^\/api\/?/, '');
   const method = req.method;
+  const { usuario, autenticado } = usuarioActual(req);
+
+  if (method === 'POST' && path === 'auth/login') {
+    const data = await req.json().catch(() => ({}));
+    const username = (data.username || '').trim().toLowerCase();
+    const password = data.password || '';
+    if (!username || !password) {
+      return Response.json({ status: 'error', mensaje: 'Ingresa usuario y contraseña' }, { status: 400 });
+    }
+    const found = USUARIOS_DEMO.find(u => u.username === username);
+    if (!found || found.passwordHash !== hashPassword(password)) {
+      return Response.json({ status: 'error', mensaje: 'Usuario o contraseña incorrectos' }, { status: 401 });
+    }
+    const userPayload = { username: found.username, nombre: found.nombre, rol: found.rol };
+    return Response.json({
+      status: 'ok',
+      mensaje: `Bienvenido, ${found.nombre}`,
+      token: firmarToken(userPayload),
+      usuario: userPayload
+    });
+  }
+
+  if (method === 'GET' && path === 'auth/me') {
+    return Response.json({
+      status: 'ok',
+      autenticado,
+      usuario,
+      motor: 'Netlify Serverless (Espejo 14 tablas)',
+      total_tablas: 14
+    });
+  }
 
   if (method === 'GET' && path === 'cartelera') {
     return Response.json({
@@ -342,7 +479,15 @@ export default async (req, context) => {
   }
 
   if (method === 'GET' && path === 'boletos') {
-    return Response.json({ status: 'ok', boletos: db.boletos });
+    if (usuario.rol === 'staff' || usuario.rol === 'gerente') {
+      return Response.json({ status: 'ok', boletos: db.boletos, alcance: usuario.rol });
+    }
+    const foliosRaw = (url.searchParams.get('folios') || '').trim();
+    const folioUnico = (url.searchParams.get('folio') || '').trim();
+    const lista = foliosRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (folioUnico && !lista.includes(folioUnico)) lista.push(folioUnico);
+    const filtrados = lista.length ? db.boletos.filter(b => lista.includes(b.folio)) : [];
+    return Response.json({ status: 'ok', boletos: filtrados, alcance: 'cliente' });
   }
 
   if (method === 'POST' && path === 'boletos/reservar') {
@@ -352,8 +497,12 @@ export default async (req, context) => {
     const fecha = (data.fecha || '2026-11-04').trim();
     const horario = (data.horario || '').trim();
     const cliente = (data.cliente || '').trim() || 'Cliente Mostrador';
-    const cantidad = parseInt(data.cantidad || 1, 10);
-    const asientos = (data.asientos || '').trim() || 'General';
+    const asientosRaw = (data.asientos || '').trim();
+
+    const listaNuevos = asientosRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!listaNuevos.length) {
+      return Response.json({ status: 'error', mensaje: 'Selecciona al menos un asiento' }, { status: 400 });
+    }
 
     const pelicula = db.peliculas.find(p => p.id === peliId) || db.peliculas[0];
     let funcionObj = null;
@@ -368,11 +517,16 @@ export default async (req, context) => {
       funcionId = funcionObj.id_funcion;
     }
 
-    const listaNuevos = asientos.split(',').map(s => s.trim()).filter(Boolean);
     const setOcupados = new Set(db.asientos_ocupados[funcionId] || []);
+    for (const a of listaNuevos) {
+      if (setOcupados.has(a)) {
+        return Response.json({ status: 'error', mensaje: `El asiento ${a} ya está ocupado en esta función` }, { status: 409 });
+      }
+    }
     listaNuevos.forEach(a => setOcupados.add(a));
     db.asientos_ocupados[funcionId] = Array.from(setOcupados).sort();
 
+    const cantidad = listaNuevos.length;
     const total = cantidad * funcionObj.precio;
     const folio = `CR-TK-${db.boletos.length + 101}`;
 
@@ -385,8 +539,9 @@ export default async (req, context) => {
       horario: funcionObj.hora,
       sala: funcionObj.sala,
       cantidad,
-      asientos,
+      asientos: listaNuevos.join(', '),
       total,
+      estado: 'Pagado',
       hora: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -394,25 +549,48 @@ export default async (req, context) => {
 
     return Response.json({
       status: 'ok',
-      mensaje: `Boleto registrado exitosamente con folio ${folio}`,
+      mensaje: `Boleto guardado con folio ${folio}`,
       boleto: nuevoBoleto,
       asientos_ocupados_funcion: db.asientos_ocupados[funcionId]
     }, { status: 201 });
   }
 
+  if (method === 'DELETE' && path.startsWith('boletos/')) {
+    const folio = path.slice('boletos/'.length);
+    const bol = db.boletos.find(b => b.folio === folio);
+    if (!bol) {
+      return Response.json({ status: 'error', mensaje: `No existe el folio ${folio}` }, { status: 404 });
+    }
+    bol.estado = 'Cancelado';
+    if (bol.funcion_id && db.asientos_ocupados[bol.funcion_id]) {
+      const liberar = new Set(bol.asientos.split(',').map(s => s.trim()));
+      db.asientos_ocupados[bol.funcion_id] = db.asientos_ocupados[bol.funcion_id].filter(a => !liberar.has(a));
+    }
+    bol.asientos = 'Cancelado';
+    return Response.json({ status: 'ok', mensaje: `Boleto ${folio} cancelado y asientos liberados en la sala` });
+  }
+
   if (method === 'GET' && path === 'dulceria') {
-    return Response.json({ status: 'ok', ordenes: db.dulceria });
+    if (usuario.rol === 'staff' || usuario.rol === 'gerente') {
+      return Response.json({ status: 'ok', ordenes: db.dulceria, alcance: usuario.rol });
+    }
+    const foliosRaw = (url.searchParams.get('folios') || '').trim();
+    const lista = foliosRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const filtradas = lista.length ? db.dulceria.filter(o => lista.includes(o.folio)) : [];
+    return Response.json({ status: 'ok', ordenes: filtradas, alcance: 'cliente' });
   }
 
   if (method === 'POST' && path === 'dulceria/ordenar') {
     const data = await req.json().catch(() => ({}));
     const cliente = (data.cliente || '').trim() || 'Cliente Dulcería';
     const combo = data.combo || 'Combo Pareja (Palomitas + 2 Refrescos)';
-    const cantidad = parseInt(data.cantidad || 1, 10);
+    const cantidad = Math.max(1, parseInt(data.cantidad || 1, 10));
     const precioUnitario = parseFloat(data.precio_unitario) || obtenerPrecioDulceria(combo);
     const total = cantidad * precioUnitario;
-    const folio = `CR-DL-${db.dulceria.length + 201}`;
+    const folio = `CR-DL-${db.dulceria.length + 1001}`;
     const imagen = data.imagen || obtenerImagenDulceria(combo);
+
+    descontarInsumosDemo(combo, cantidad);
 
     const nuevaOrden = {
       folio,
@@ -433,8 +611,43 @@ export default async (req, context) => {
     }, { status: 201 });
   }
 
+  if (method === 'PUT' && path.startsWith('dulceria/') && path.endsWith('/estado')) {
+    if (usuario.rol !== 'staff' && usuario.rol !== 'gerente') {
+      return Response.json({ status: 'error', mensaje: 'Acceso restringido a personal o gerencia' }, { status: 403 });
+    }
+    const folio = path.slice('dulceria/'.length, -'/estado'.length);
+    const ord = db.dulceria.find(o => o.folio === folio);
+    if (!ord) return Response.json({ status: 'error', mensaje: `Orden ${folio} no encontrada` }, { status: 404 });
+    const data = await req.json().catch(() => ({}));
+    const sig = {
+      'En preparación': 'Listo para entrega',
+      Lista: 'Entregada',
+      'Listo para entrega': 'Entregada',
+      Entregada: 'En preparación'
+    };
+    ord.estado = data.estado || sig[ord.estado] || 'Listo para entrega';
+    return Response.json({ status: 'ok', mensaje: `Orden ${folio} actualizada a '${ord.estado}'`, estado: ord.estado });
+  }
+
+  if (method === 'DELETE' && path.startsWith('dulceria/')) {
+    if (usuario.rol !== 'staff' && usuario.rol !== 'gerente') {
+      return Response.json({ status: 'error', mensaje: 'Acceso restringido a personal o gerencia' }, { status: 403 });
+    }
+    const folio = path.slice('dulceria/'.length);
+    const idx = db.dulceria.findIndex(o => o.folio === folio);
+    if (idx === -1) return Response.json({ status: 'error', mensaje: `Orden ${folio} no encontrada` }, { status: 404 });
+    db.dulceria.splice(idx, 1);
+    return Response.json({ status: 'ok', mensaje: `Orden ${folio} eliminada` });
+  }
+
   if (method === 'GET' && path === 'incidencias') {
-    return Response.json({ status: 'ok', incidencias: db.incidencias });
+    if (usuario.rol === 'staff' || usuario.rol === 'gerente') {
+      return Response.json({ status: 'ok', incidencias: db.incidencias, alcance: usuario.rol });
+    }
+    const foliosRaw = (url.searchParams.get('folios') || '').trim();
+    const lista = foliosRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const filtradas = lista.length ? db.incidencias.filter(i => lista.includes(i.folio)) : [];
+    return Response.json({ status: 'ok', incidencias: filtradas, alcance: 'cliente' });
   }
 
   if (method === 'POST' && path === 'incidencias/reportar') {
@@ -449,9 +662,11 @@ export default async (req, context) => {
     }
 
     const imagen = data.imagen || obtenerImagenIncidencia(categoria, problema);
+    const folio = `CR-INC-${db.incidencias.length + 501}`;
 
     const nuevaIncidencia = {
-      id: `INC-0${db.incidencias.length + 1}`,
+      id: folio,
+      folio,
       sala,
       categoria,
       problema,
@@ -464,9 +679,122 @@ export default async (req, context) => {
 
     return Response.json({
       status: 'ok',
-      mensaje: 'Reporte registrado y enviado a mantenimiento',
+      mensaje: `Reporte ${folio} registrado y enviado a mantenimiento`,
       incidencia: nuevaIncidencia
     }, { status: 201 });
+  }
+
+  if (method === 'PUT' && path.startsWith('incidencias/') && path.endsWith('/estado')) {
+    if (usuario.rol !== 'staff' && usuario.rol !== 'gerente') {
+      return Response.json({ status: 'error', mensaje: 'Acceso restringido a personal o gerencia' }, { status: 403 });
+    }
+    const folio = path.slice('incidencias/'.length, -'/estado'.length);
+    const inc = db.incidencias.find(i => i.id === folio || i.folio === folio);
+    if (!inc) return Response.json({ status: 'error', mensaje: `Reporte ${folio} no encontrado` }, { status: 404 });
+    const data = await req.json().catch(() => ({}));
+    const sig = {
+      Pendiente: 'En proceso',
+      'En proceso': 'Resuelto',
+      Resuelto: 'Pendiente'
+    };
+    inc.estado = data.estado || sig[inc.estado] || 'Resuelto';
+    return Response.json({ status: 'ok', mensaje: `Incidencia ${folio} actualizada a '${inc.estado}'`, estado: inc.estado });
+  }
+
+  if (method === 'DELETE' && path.startsWith('incidencias/')) {
+    if (usuario.rol !== 'staff' && usuario.rol !== 'gerente') {
+      return Response.json({ status: 'error', mensaje: 'Acceso restringido a personal o gerencia' }, { status: 403 });
+    }
+    const folio = path.slice('incidencias/'.length);
+    const idx = db.incidencias.findIndex(i => i.id === folio || i.folio === folio);
+    if (idx === -1) return Response.json({ status: 'error', mensaje: `Reporte ${folio} no encontrado` }, { status: 404 });
+    db.incidencias.splice(idx, 1);
+    return Response.json({ status: 'ok', mensaje: `Reporte ${folio} eliminado` });
+  }
+
+  if (method === 'GET' && path === 'dashboard') {
+    if (usuario.rol !== 'gerente') {
+      return Response.json({ status: 'error', mensaje: 'Panel Gerencial exclusivo para cuenta de Gerente' }, { status: 403 });
+    }
+    const boletosPagados = db.boletos.filter(b => b.estado !== 'Cancelado');
+    const ingTaq = boletosPagados.reduce((acc, b) => acc + Number(b.total || 0), 0);
+    const ingDul = db.dulceria.reduce((acc, o) => acc + Number(o.total || 0), 0);
+    const butacasVend = boletosPagados.reduce((acc, b) => acc + Number(b.cantidad || 0), 0);
+    const incPend = db.incidencias.filter(i => i.estado !== 'Resuelto').length;
+    const incRes = db.incidencias.filter(i => i.estado === 'Resuelto').length;
+
+    const conteoTablas = [
+      { tabla: 'salas', registros: 9 },
+      { tabla: 'asientos', registros: 360 },
+      { tabla: 'peliculas', registros: db.peliculas.length },
+      { tabla: 'funciones', registros: db.peliculas.length * 24 },
+      { tabla: 'clientes', registros: 6 },
+      { tabla: 'boletos', registros: db.boletos.length },
+      { tabla: 'boleto_asiento', registros: butacasVend },
+      { tabla: 'productos', registros: 12 },
+      { tabla: 'insumos', registros: db.insumos.length },
+      { tabla: 'producto_insumo', registros: 28 },
+      { tabla: 'ordenes_dulceria', registros: db.dulceria.length },
+      { tabla: 'orden_detalle', registros: db.dulceria.length },
+      { tabla: 'incidencias', registros: db.incidencias.length },
+      { tabla: 'usuarios', registros: USUARIOS_DEMO.length }
+    ];
+
+    const ocupacion = db.peliculas.slice(0, 6).map((p, idx) => {
+      const fn = p.funciones[0];
+      const vend = (db.asientos_ocupados[fn.id_funcion] || []).length;
+      return {
+        id_funcion: idx + 1,
+        pelicula: p.titulo,
+        sala: fn.sala,
+        fecha: fn.fecha,
+        hora: fn.hora,
+        aforo: 40,
+        asientos_vendidos: vend,
+        porcentaje_ocupacion: Math.round((vend * 1000) / 40) / 10
+      };
+    });
+
+    return Response.json({
+      status: 'ok',
+      motor: 'Netlify Serverless (Espejo 14 tablas)',
+      archivo: 'database/cine_regina.db',
+      foreign_keys: true,
+      integridad: 'ok',
+      kpis: {
+        ingresos_taquilla: ingTaq,
+        ingresos_dulceria: ingDul,
+        ingresos_totales: ingTaq + ingDul,
+        boletos_activos: boletosPagados.length,
+        butacas_vendidas: butacasVend,
+        ordenes_activas: db.dulceria.length,
+        incidencias_pendientes: incPend,
+        incidencias_resueltas: incRes
+      },
+      conteo_tablas: conteoTablas,
+      ocupacion_funciones: ocupacion,
+      insumos: db.insumos
+    });
+  }
+
+  if (method === 'POST' && path === 'insumos/resurtir') {
+    if (usuario.rol !== 'gerente') {
+      return Response.json({ status: 'error', mensaje: 'Solo Gerencia puede resurtir inventario en bodega' }, { status: 403 });
+    }
+    const data = await req.json().catch(() => ({}));
+    const idInsumo = data.id_insumo;
+    const cantidad = Number(data.cantidad || 20);
+    if (!idInsumo || idInsumo === 'all') {
+      db.insumos.forEach(i => { i.stock_actual = Math.round((i.stock_actual + cantidad) * 100) / 100; });
+    } else {
+      const ins = db.insumos.find(i => i.id_insumo === Number(idInsumo));
+      if (ins) ins.stock_actual = Math.round((ins.stock_actual + cantidad) * 100) / 100;
+    }
+    return Response.json({
+      status: 'ok',
+      mensaje: `Inventario actualizado (+${cantidad} unidades)`,
+      insumos: db.insumos
+    });
   }
 
   return Response.json({ status: 'error', mensaje: 'Ruta no encontrada' }, { status: 404 });

@@ -223,7 +223,7 @@ def main():
 
     imprimir(titulo("Resultado final"))
     imprimir([
-        "La base de datos cine_regina.db se creó correctamente con 13 tablas",
+        f"La base de datos cine_regina.db se creó correctamente con {len(tablas)} tablas",
         "relacionadas, sus claves primarias y foráneas, restricciones CHECK,",
         "índices y una vista de consulta. Todas las pruebas de integridad",
         "pasaron y las restricciones rechazaron los datos inválidos.",
